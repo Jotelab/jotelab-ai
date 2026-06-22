@@ -1,0 +1,18 @@
+[project]
+name = "jotelab-symbolic-engine"
+version = "0.1.0"
+description = "Jotelab constrained symbolic computation engine (SymPy) — SUVAT launch topic"
+requires-python = ">=3.11"
+dependencies = [
+    # Pin SymPy: solve() root ordering and nsimplify behaviour can shift between
+    # releases, and the verification harness asserts on exact values (build guide §4).
+    "sympy==1.13.*",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+# Engine/templates/harness are top-level packages at the repo root.
+pythonpath = ["."]
+testpaths = ["tests"]

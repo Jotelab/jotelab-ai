@@ -1,0 +1,3 @@
+# Symbolic engine (Python) — pinned per build guide §4. Independent of the web track.
+sympy==1.13.*
+pytest>=8
