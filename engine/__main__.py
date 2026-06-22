@@ -4,12 +4,22 @@ Generate one fully-solved physics problem instance and print it, optionally
 re-checking it through the Data Fidelity harness. A thin wrapper over
 :func:`engine.loop.generate` — no new engine logic lives here.
 
+By default each run is **fresh**: with no ``--given``/``--find`` the CLI picks a
+random valid given/find split, and with no ``--seed`` it picks a random seed — so
+calling it repeatedly yields different problems. Both choices are echoed in the
+output (the ``seed`` line and the ``given``/``find`` lines), so any run is exactly
+reproducible by passing that seed (and split) back. Provide ``--seed`` and/or
+``--given``/``--find`` to pin them.
+
 Examples::
 
-    # Basic mode — a random clean SUVAT problem
+    # Basic mode — a different random clean SUVAT problem each run
     python -m engine
 
-    # Advanced mode — pin Given, choose the Find target
+    # Reproduce a specific problem (pin the split and the seed)
+    python -m engine --given u,a,t --find v --seed 42
+
+    # Advanced mode — pin Given values, choose the Find target
     python -m engine --given u,a,t --find v --condition u=0 --condition a=2 --condition t=5
 
     # Raw sympy_data contract, and run the verifier
@@ -20,11 +30,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
 
 from engine.errors import EngineError
 from engine.loop import generate
-from engine.registry import topics
+from engine.registry import load_template, topics
 
 
 def _parse_csv(value):
@@ -60,7 +71,8 @@ def _build_parser():
                    help="pin a variable to an exact value (repeatable)")
     p.add_argument("--difficulty", default="easy",
                    choices=["easy", "medium", "hard"])
-    p.add_argument("--seed", type=int, default=0, help="RNG seed (reproducible)")
+    p.add_argument("--seed", type=int, default=None,
+                   help="RNG seed (reproducible); random each run if omitted")
     p.add_argument("--json", action="store_true",
                    help="print the raw sympy_data JSON instead of a readable summary")
     p.add_argument("--verify", action="store_true",
@@ -90,17 +102,36 @@ def _render_human(data, verified):
     return "\n".join(lines)
 
 
+def _random_split(topic):
+    """Pick a random valid ``(given, find)`` split for ``topic`` (as names).
+
+    Keeps the deterministic library untouched: the randomness is an entry-point
+    convenience so a bare ``python -m engine`` gives a fresh problem each run. The
+    chosen split is echoed in the output, so the run stays reproducible.
+    """
+    template = load_template(topic)
+    given, find = random.choice(template.valid_splits())
+    return [s.name for s in given], find.name
+
+
 def main(argv=None):
     args = _build_parser().parse_args(argv)
     conditions = _parse_conditions(args.condition)
+
+    # Fresh-by-default (unless pinned): random seed if none given, and a random
+    # valid split if neither --given nor --find was provided.
+    seed = args.seed if args.seed is not None else random.randrange(1_000_000)
+    given, find = args.given, args.find
     try:
+        if given is None and find is None:
+            given, find = _random_split(args.topic)
         data = generate(
             args.topic,
-            given=args.given,
-            find=args.find,
+            given=given,
+            find=find,
             conditions=conditions or None,
             difficulty=args.difficulty,
-            seed=args.seed,
+            seed=seed,
         )
     except EngineError as exc:
         print(f"error: {exc}", file=sys.stderr)

@@ -17,6 +17,7 @@ self-contained module under ``templates/``.
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 from typing import Callable
 
@@ -64,3 +65,22 @@ class Template:
 
     def unit_for(self, sym):
         return self.variables[sym].unit
+
+    def valid_splits(self):
+        """Every ``(given, find)`` split this topic can solve.
+
+        Enumerated from the template's own :attr:`solvability` map, so it stays
+        correct per topic (e.g. SUVAT v1 yields only the 3-given / 1-find splits).
+        Used by the CLI to pick a fresh random problem when no split is requested.
+        """
+        syms = list(self.symbols.values())
+        splits = []
+        for size in range(1, len(syms)):
+            for given in itertools.combinations(syms, size):
+                for find in syms:
+                    if find in given:
+                        continue
+                    ok, _ = self.solvability(given, find)
+                    if ok:
+                        splits.append((given, find))
+        return splits
