@@ -7,18 +7,26 @@ Fidelity check depend on, so it is fixed here::
     {
       "topic": "suvat",
       "seed": 80421,
-      "given": [{"symbol": "u", "value": 0, "unit": "m/s"}, ...],
-      "find":  {"symbol": "v", "value": 10, "unit": "m/s"},
+      "given": [{"symbol": "u", "value": 0, "exact": "0", "unit": "m/s"}, ...],
+      "find":  {"symbol": "v", "value": 10, "exact": "10", "unit": "m/s"},
       "steps": [{"expr_latex": ..., "substituted_latex": ..., "result_latex": ...}],
-      "final_answer": {"value": 10, "unit": "m/s", "latex": "10\\ \\text{m/s}"},
+      "final_answer": {"value": 10, "exact": "10", "unit": "m/s",
+                       "latex": "10\\ \\text{m/s}"},
       "policy_applied": "easy",
       "plausible": true
     }
 
 Numbers + units are first-class so the Data Fidelity check can compare them to the
-LLM's rendered text programmatically — no prose parsing (spec §7). Exact SymPy
-values are converted to a display number only here, at the final emit step
-(build guide §6).
+LLM's rendered text programmatically — no prose parsing (spec §7).
+
+**Exactness (ADR-005).** Every numeric field carries two forms: ``exact`` — a
+canonical, losslessly-reloadable string that is the *authoritative* value (e.g.
+``"1/3"``) — and ``value`` — a JSON display number that is *presentation only* and
+may be a lossy round of a non-terminating rational (``1/3 -> 0.333333``). The
+verification harness, the Data Fidelity check, and the renderer use ``exact`` /
+``latex``; nothing trusts ``value`` as the source of truth. Storing only a display
+float (the pre-ADR-005 behaviour) silently corrupted non-terminating clean answers
+and broke the engine's own Data Fidelity oracle on the ``medium`` band.
 """
 
 from __future__ import annotations
@@ -27,11 +35,13 @@ import sympy
 
 
 def to_display(value):
-    """Convert an exact SymPy number to a JSON-friendly int/float.
+    """JSON-friendly **display** number — presentation only, *not* authoritative.
 
-    Integers stay ``int``; everything else becomes a ``float`` rounded to 6
-    places (clean answers are ≤3 decimals, so this is exact for them and only
-    trims float noise). The exact value is recoverable via ``exact()``.
+    Integers stay ``int``; every other rational becomes a ``float`` rounded to 6
+    places. This is lossy for non-terminating rationals (``1/3 -> 0.333333``);
+    the exact, authoritative value travels beside it as the ``exact`` string (see
+    :func:`to_exact`). Renderers and the Data Fidelity check must use ``exact`` /
+    ``latex``, never this field (ADR-005).
     """
     val = sympy.nsimplify(value)
     if val.is_Integer:
@@ -39,14 +49,30 @@ def to_display(value):
     return round(float(val), 6)
 
 
-def exact(value):
-    """Recover an exact SymPy ``Rational`` from a display number.
+def to_exact(value):
+    """Canonical, losslessly-reloadable string for an exact SymPy number (ADR-005).
 
-    Used by the verification harness to re-derive without reintroducing float
-    error: ``Rational(str(10.5)) == 21/2`` exactly.
+    ``1/3 -> "1/3"``, ``10 -> "10"``, ``21/2 -> "21/2"``. This — not
+    :func:`to_display` — is the source of truth for every number in
+    ``sympy_data``. Reload it with :func:`exact`.
+    """
+    return str(sympy.nsimplify(value))
+
+
+def exact(value):
+    """Recover the exact SymPy number from a contract ``exact`` string (ADR-005).
+
+    ``exact("1/3") == Rational(1, 3)`` exactly — no float error. Accepts a SymPy
+    object or an ``int`` unchanged. Callers must pass the authoritative ``exact``
+    field, never the lossy display ``value``; a bare ``float`` is still parsed via
+    its string form for safety but signals a misuse.
     """
     if isinstance(value, sympy.Basic):
         return sympy.nsimplify(value)
+    if isinstance(value, int):
+        return sympy.Integer(value)
+    if isinstance(value, str):
+        return sympy.nsimplify(sympy.sympify(value))
     return sympy.Rational(str(value))
 
 
@@ -78,6 +104,7 @@ def build_sympy_data(template, given, find, inputs, value, sym_expr, seed, polic
         {
             "symbol": sym.name,
             "value": to_display(inputs[sym]),
+            "exact": to_exact(inputs[sym]),
             "unit": template.unit_for(sym),
         }
         for sym in sorted(given, key=lambda x: x.name)
@@ -88,10 +115,12 @@ def build_sympy_data(template, given, find, inputs, value, sym_expr, seed, polic
         "topic": template.topic,
         "seed": seed,
         "given": given_out,
-        "find": {"symbol": find.name, "value": to_display(value), "unit": find_unit},
+        "find": {"symbol": find.name, "value": to_display(value),
+                 "exact": to_exact(value), "unit": find_unit},
         "steps": steps,
         "final_answer": {
             "value": to_display(value),
+            "exact": to_exact(value),
             "unit": find_unit,
             "latex": _unit_latex(value, find_unit),
         },

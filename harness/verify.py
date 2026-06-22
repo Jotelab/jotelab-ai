@@ -10,7 +10,13 @@ four things:
   *whole* SUVAT system, a different code path from the generator's single-equation
   solve, so a generator bug cannot agree with itself;
 * **(c)** units are consistent across given / find / final answer;
-* **(d)** the template's plausibility constraints hold.
+* **(d)** the template's plausibility constraints hold;
+* **(e)** each display ``value`` agrees with its authoritative ``exact`` string,
+  and ``final_answer.exact`` equals ``find.exact`` (ADR-005 — guards against the
+  lossy display field drifting from the source of truth).
+
+All math is done on the **exact** values (ADR-005); the display ``value`` is never
+trusted as the source of truth, only checked for consistency in (e).
 
 This harness gates every change to a template and is the engine-side ground truth
 for the Data Fidelity benchmark metric (spec §11).
@@ -20,7 +26,7 @@ from __future__ import annotations
 
 import sympy
 
-from engine.contract import exact
+from engine.contract import exact, to_display
 from templates import suvat
 from templates.suvat import ALL_SYMS, EQUATION_BY_EXCLUDED, SYMBOLS
 
@@ -38,16 +44,17 @@ def verify(sympy_data, difficulty="easy"):
     if sympy_data["topic"] != "suvat":
         raise NotImplementedError(f"no harness for topic {sympy_data['topic']!r}")
 
-    given = {SYMBOLS[g["symbol"]]: exact(g["value"]) for g in sympy_data["given"]}
+    given = {SYMBOLS[g["symbol"]]: exact(g["exact"]) for g in sympy_data["given"]}
     find_sym = SYMBOLS[sympy_data["find"]["symbol"]]
-    find_val = exact(sympy_data["find"]["value"])
+    find_val = exact(sympy_data["find"]["exact"])
     values = dict(given)
     values[find_sym] = find_val
 
-    _assert_equation_holds(given, find_sym, values)          # (a)
-    _assert_independent_recompute(given, find_sym, find_val)  # (b)
-    _assert_units_consistent(sympy_data)                     # (c)
-    _assert_plausible(values, difficulty)                    # (d)
+    _assert_equation_holds(given, find_sym, values)                      # (a)
+    _assert_independent_recompute(given, find_sym, find_val, difficulty)  # (b)
+    _assert_units_consistent(sympy_data)                                 # (c)
+    _assert_plausible(values, difficulty)                                # (d)
+    _assert_display_consistent(sympy_data)                               # (e)
     return True
 
 
@@ -62,9 +69,15 @@ def _assert_equation_holds(given, find_sym, values):
         raise FidelityError(f"(a) equation {eq} does not hold; residual={residual}")
 
 
-def _assert_independent_recompute(given, find_sym, find_val):
-    """(b) Re-solve the whole SUVAT system — a path independent of the generator."""
-    recomputed = independent_solve(given, find_sym)
+def _assert_independent_recompute(given, find_sym, find_val, difficulty):
+    """(b) Re-solve the whole SUVAT system — a path independent of the generator.
+
+    The ``difficulty`` is forwarded to :func:`independent_solve` so the oracle uses
+    the *same* physical root-selection rule as the generator at this band (ADR-005
+    / fix F2). Without it the recompute silently fell back to ``easy`` selection
+    and disagreed with the generator on ``medium`` / ``hard`` (e.g. negative roots).
+    """
+    recomputed = independent_solve(given, find_sym, difficulty)
     if recomputed is None:
         raise FidelityError(f"(b) independent solve found no physical {find_sym}")
     if sympy.simplify(recomputed - find_val) != 0:
@@ -113,3 +126,26 @@ def _assert_plausible(values, difficulty):
     for c in suvat.CONSTRAINTS:
         if not c(values, difficulty):
             raise FidelityError(f"(d) plausibility constraint {c.__name__} failed")
+
+
+def _assert_display_consistent(sympy_data):
+    """(e) Display ``value`` agrees with authoritative ``exact`` (ADR-005).
+
+    Catches drift in the lossy presentation field and any mismatch between
+    ``final_answer`` and ``find`` — the display number must be exactly the
+    :func:`~engine.contract.to_display` of the exact value it claims to show.
+    """
+    items = list(sympy_data["given"]) + [
+        sympy_data["find"],
+        sympy_data["final_answer"],
+    ]
+    for it in items:
+        if to_display(exact(it["exact"])) != it["value"]:
+            raise FidelityError(
+                f"(e) display value {it['value']!r} != exact {it['exact']!r}"
+            )
+    if sympy_data["final_answer"]["exact"] != sympy_data["find"]["exact"]:
+        raise FidelityError(
+            f"(e) final_answer.exact {sympy_data['final_answer']['exact']!r} != "
+            f"find.exact {sympy_data['find']['exact']!r}"
+        )

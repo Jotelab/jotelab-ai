@@ -61,12 +61,14 @@ def test_worked_example_sympy_data_shape():
         conditions={u: 0, a: 2, t: 5}, seed=80421,
     )
     assert data["topic"] == "suvat"
-    assert data["find"] == {"symbol": "v", "value": 10, "unit": "m/s"}
+    # find carries both the display value and the authoritative exact string (ADR-005).
+    assert data["find"] == {"symbol": "v", "value": 10, "exact": "10", "unit": "m/s"}
     given = {g["symbol"]: g for g in data["given"]}
-    assert given["u"]["value"] == 0 and given["u"]["unit"] == "m/s"
-    assert given["a"]["value"] == 2 and given["a"]["unit"] == "m/s^2"
-    assert given["t"]["value"] == 5 and given["t"]["unit"] == "s"
+    assert given["u"]["value"] == 0 and given["u"]["exact"] == "0" and given["u"]["unit"] == "m/s"
+    assert given["a"]["value"] == 2 and given["a"]["exact"] == "2" and given["a"]["unit"] == "m/s^2"
+    assert given["t"]["value"] == 5 and given["t"]["exact"] == "5" and given["t"]["unit"] == "s"
     assert data["final_answer"]["value"] == 10
+    assert data["final_answer"]["exact"] == "10"
     assert data["final_answer"]["unit"] == "m/s"
     assert data["policy_applied"] == "easy"
     assert data["plausible"] is True

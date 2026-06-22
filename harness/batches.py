@@ -22,22 +22,34 @@ _SUVAT_SPLITS = [
     ((u, a, t), v),   # repeat with different seeds
 ]
 
+# Gate 5 must hold across *every* difficulty band, not just `easy` (fix F3). The
+# `medium`/`hard` bands exercise fractional and non-positive clean answers, which
+# is exactly where the lossy-display bug (F1) and the difficulty-blind oracle (F2)
+# used to hide.
+_DIFFICULTIES = ("easy", "medium", "hard")
 
-def suvat_batch(n_seeds=12):
-    """A SUVAT seed batch: every valid split across ``n_seeds`` seeds (easy)."""
+
+def suvat_batch(n_seeds=12, difficulties=_DIFFICULTIES):
+    """A SUVAT seed batch: every valid split across ``n_seeds`` seeds, per band.
+
+    Spans ``difficulties`` (all three by default) so the Data Fidelity gate proves
+    100% on the fractional/negative-answer paths too, not only the integer `easy`
+    path (fix F3).
+    """
     batch = []
-    for split_idx, (given, find) in enumerate(_SUVAT_SPLITS):
-        for k in range(n_seeds):
-            seed = 80421 + 1000 * split_idx + k
-            batch.append(
-                {
-                    "topic": "suvat",
-                    "given": given,
-                    "find": find,
-                    "difficulty": "easy",
-                    "seed": seed,
-                }
-            )
+    for diff_idx, difficulty in enumerate(difficulties):
+        for split_idx, (given, find) in enumerate(_SUVAT_SPLITS):
+            for k in range(n_seeds):
+                seed = 80421 + 100_000 * diff_idx + 1000 * split_idx + k
+                batch.append(
+                    {
+                        "topic": "suvat",
+                        "given": given,
+                        "find": find,
+                        "difficulty": difficulty,
+                        "seed": seed,
+                    }
+                )
     return batch
 
 

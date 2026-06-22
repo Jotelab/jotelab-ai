@@ -26,7 +26,8 @@ def test_cli_advanced_json_verify(capsys):
     out = capsys.readouterr().out
     assert rc == 0
     data = json.loads(out)
-    assert data["find"] == {"symbol": "v", "value": 10, "unit": "m/s"}
+    # find carries the display value plus the authoritative exact string (ADR-005).
+    assert data["find"] == {"symbol": "v", "value": 10, "exact": "10", "unit": "m/s"}
 
 
 def test_cli_unsolvable_exits_nonzero(capsys):
