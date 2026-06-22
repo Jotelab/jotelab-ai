@@ -7,10 +7,26 @@ SUVAT seed batch reports Data Fidelity = 100%.
 import copy
 
 import pytest
+import sympy
 
+from engine.contract import exact
 from engine.loop import generate
 from harness.batches import WORKED_EXAMPLE, suvat_batch
 from harness.verify import FidelityError, verify
+
+
+def test_exact_parses_rationals_and_fails_closed():
+    """N1: contract.exact reloads any engine rational, but rejects non-rationals.
+
+    Uses sympy.Rational (not the general sympify evaluator), so every clean answer
+    round-trips exactly while a non-rational string fails closed rather than being
+    silently evaluated.
+    """
+    assert exact("4/7") == sympy.Rational(4, 7)
+    assert exact("-3/5") == sympy.Rational(-3, 5)
+    assert exact("10") == sympy.Integer(10)
+    with pytest.raises((TypeError, ValueError, SyntaxError)):
+        exact("2**10")  # an expression, not a rational — must not evaluate to 1024
 
 
 def _gen(req):

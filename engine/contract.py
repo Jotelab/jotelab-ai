@@ -66,13 +66,19 @@ def exact(value):
     object or an ``int`` unchanged. Callers must pass the authoritative ``exact``
     field, never the lossy display ``value``; a bare ``float`` is still parsed via
     its string form for safety but signals a misuse.
+
+    The string form is parsed with :class:`sympy.Rational`, not the general
+    ``sympify`` evaluator (review finding N1): every clean answer is a rational, so
+    ``Rational`` is equivalent for all engine output yet **fails closed** on
+    anything that is not a plain rational — hardening this verification-gate parser
+    against untrusted/reconstructed ``sympy_data``.
     """
     if isinstance(value, sympy.Basic):
         return sympy.nsimplify(value)
     if isinstance(value, int):
         return sympy.Integer(value)
     if isinstance(value, str):
-        return sympy.nsimplify(sympy.sympify(value))
+        return sympy.Rational(value)
     return sympy.Rational(str(value))
 
 
