@@ -40,6 +40,21 @@ class OverDeterminedError(EngineError):
         )
 
 
+class TemplateValidationError(EngineError):
+    """A declarative template failed a validation-gate stage (ADR-007).
+
+    Carries the failing ``stage`` number, its ``stage_name``, and a human
+    ``reason`` so the orchestrator can tell an author exactly why a submitted
+    template was rejected. Raised by the five-stage gate; never swallowed.
+    """
+
+    def __init__(self, stage, stage_name, reason=""):
+        self.stage = stage
+        self.stage_name = stage_name
+        self.reason = reason
+        super().__init__(f"[stage {stage}: {stage_name}] {reason}")
+
+
 class NoCleanInstanceError(EngineError):
     """No instance satisfied the constraints within ``MAX_ATTEMPTS`` (spec §5, §9).
 
