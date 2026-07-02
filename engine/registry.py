@@ -6,6 +6,8 @@ strands register here; the loop is topic-agnostic and goes through this map.
 
 from __future__ import annotations
 
+import contextlib
+
 from templates.base import Template
 from templates.suvat import SUVAT
 
@@ -30,3 +32,25 @@ def register(template: Template) -> None:
 
 def topics() -> list:
     return sorted(_REGISTRY)
+
+
+@contextlib.contextmanager
+def temporary(template):
+    """Register ``template`` under its topic for the duration of the block only.
+
+    Lets the validation gate (stage 5) and the parity test drive the unchanged
+    ``loop.generate()`` on a candidate template without permanently registering it
+    (ADR-007: register only on all-pass). Restores any previous entry — or removes
+    a newly-added topic — on exit, even on error.
+    """
+    key = template.topic
+    had = key in _REGISTRY
+    prev = _REGISTRY.get(key)
+    _REGISTRY[key] = template
+    try:
+        yield template
+    finally:
+        if had:
+            _REGISTRY[key] = prev
+        else:
+            _REGISTRY.pop(key, None)

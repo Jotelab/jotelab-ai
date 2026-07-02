@@ -31,26 +31,19 @@ MAX_ATTEMPTS = 200
 SOFT_LIMIT = 120
 
 
-def generate(topic=None, given=None, find=None, conditions=None, difficulty="easy",
-             seed=0, max_attempts=MAX_ATTEMPTS, soft_limit=SOFT_LIMIT, template=None):
+def generate(topic, given=None, find=None, conditions=None, difficulty="easy",
+             seed=0, max_attempts=MAX_ATTEMPTS, soft_limit=SOFT_LIMIT):
     """Generate one fully-solved problem instance as ``sympy_data`` (spec §5, §7).
 
     Basic mode: pass only ``topic`` (+ ``difficulty``) and the template's default
     given/find split is used. Advanced mode: pass ``given`` (3 symbols/names) and
     ``find`` (1). ``conditions`` pins variables (see :mod:`engine.sampling`).
 
-    ``template`` bypasses the registry and generates with an explicit
-    :class:`~templates.base.Template` (ADR-007): the validation gate must replay
-    golden cases through a *candidate* declarative template before it is
-    registered. When given, ``topic`` is ignored and taken from the template.
-
     Raises :class:`UnsolvableError` / :class:`OverDeterminedError` at validation,
     or :class:`NoCleanInstanceError` if no clean instance is found in
     ``max_attempts``.
     """
-    if template is None:
-        template = load_template(topic)
-    topic = template.topic
+    template = load_template(topic)
     given, find = _resolve_split(template, given, find)
 
     # -- validation (spec §3, §9): reject before entering the loop -------------

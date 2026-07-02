@@ -1,0 +1,33 @@
+{
+  "topic": "suvat",
+  "variables": {
+    "u": {"unit": "m/s",   "ranges": {"easy": [0, 20, false],  "medium": [0, 40, false],  "hard": [0, 40, false]}},
+    "v": {"unit": "m/s",   "ranges": {"easy": [0, 30, false],  "medium": [0, 60, false],  "hard": [0, 60, false]}},
+    "a": {"unit": "m/s^2", "ranges": {"easy": [1, 10, false],  "medium": [1, 15, true],   "hard": [1, 15, true]}},
+    "t": {"unit": "s",     "ranges": {"easy": [1, 10, false],  "medium": [1, 20, false],  "hard": [1, 20, false]}},
+    "s": {"unit": "m",     "ranges": {"easy": [1, 50, false],  "medium": [1, 150, false], "hard": [1, 150, false]}}
+  },
+  "equations": [
+    "Eq(v, u + a*t)",
+    "Eq(s, u*t + a*t**2/2)",
+    "Eq(v**2, u**2 + 2*a*s)",
+    "Eq(s, (u + v)*t/2)",
+    "Eq(s, v*t - a*t**2/2)"
+  ],
+  "root_policy": {"name": "smallest_positive_physical", "nonneg_fallback_vars": ["u", "s", "v"]},
+  "constraints": [
+    {"var": "t", "op": ">",     "value": 0},
+    {"var": "u", "op": "abs<=", "value": 100},
+    {"var": "v", "op": "abs<=", "value": 100},
+    {"var": "a", "op": "!=",    "value": 0},
+    {"var": "u", "op": ">=",    "value": 0, "difficulty": "easy"},
+    {"var": "v", "op": ">=",    "value": 0, "difficulty": "easy"},
+    {"var": "s", "op": ">=",    "value": 0, "difficulty": "easy"},
+    {"var": "a", "op": ">=",    "value": 0, "difficulty": "easy", "scope": "root"}
+  ],
+  "default_split": {"given": ["u", "a", "t"], "find": "v"},
+  "golden_cases": [
+    {"given": {"u": 0, "a": 2, "t": 5}, "find": "v", "difficulty": "easy", "expected": "10"}
+  ],
+  "trust_state": "unverified"
+}

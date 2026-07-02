@@ -2,24 +2,26 @@
 
 Built alongside the engine, not after. For each emitted ``sympy_data`` instance
 the harness re-derives the answer **independently of the generator** and asserts
-four things:
+five things:
 
-* **(a)** the SUVAT equation linking ``given ∪ {find}`` holds for the emitted
-  values;
+* **(a)** the equation linking ``given ∪ {find}`` holds for the emitted values;
 * **(b)** ``final_answer`` matches an independent recomputation — solving the
-  *whole* SUVAT system, a different code path from the generator's single-equation
-  solve, so a generator bug cannot agree with itself;
+  *whole* equation system, a different code path from the generator's
+  single-equation solve, so a generator bug cannot agree with itself;
 * **(c)** units are consistent across given / find / final answer;
 * **(d)** the template's plausibility constraints hold;
-* **(e)** each display ``value`` agrees with its authoritative ``exact`` string,
-  and ``final_answer.exact`` equals ``find.exact`` (ADR-005 — guards against the
-  lossy display field drifting from the source of truth).
+* **(e)** each display ``value`` agrees with its authoritative ``exact`` string, and
+  ``final_answer.exact`` equals ``find.exact`` (ADR-005 — guards against the lossy
+  display field drifting from the source of truth).
 
 All math is done on the **exact** values (ADR-005); the display ``value`` is never
 trusted as the source of truth, only checked for consistency in (e).
 
-This harness gates every change to a template and is the engine-side ground truth
-for the Data Fidelity benchmark metric (spec §11).
+The core, :func:`verify_generic`, works for **any** parsed :class:`Template`
+(ADR-007): every topic-specific source — symbols, equations, canonical units,
+constraints, root policy — is read from the passed template, not imported from a
+particular topic module. :func:`verify` keeps the SUVAT-specific public entry point
+and delegates to the generic core, so existing callers are unchanged.
 """
 
 from __future__ import annotations
@@ -27,57 +29,91 @@ from __future__ import annotations
 import sympy
 
 from engine.contract import exact, to_display
-from templates import suvat
-from templates.suvat import ALL_SYMS, EQUATION_BY_EXCLUDED, SYMBOLS
+from engine.registry import load_template
 
 
 class FidelityError(AssertionError):
     """A ``sympy_data`` instance failed an independent Data Fidelity assertion."""
 
 
+# -- public entry points -------------------------------------------------------
 def verify(sympy_data, difficulty="easy"):
-    """Raise :class:`FidelityError` if ``sympy_data`` fails any of (a)–(d).
+    """SUVAT Data-Fidelity check (delegates to the topic-generic core).
 
-    Returns ``True`` when the instance is faithful. Only the SUVAT topic is
-    supported at launch (build guide §8); other topics raise ``NotImplementedError``.
+    Returns ``True`` when the instance is faithful. Only the SUVAT topic is wired
+    to this convenience entry point; other topics call :func:`verify_generic`
+    directly with their parsed template.
     """
     if sympy_data["topic"] != "suvat":
         raise NotImplementedError(f"no harness for topic {sympy_data['topic']!r}")
+    return verify_generic(sympy_data, load_template("suvat"), difficulty)
 
-    given = {SYMBOLS[g["symbol"]]: exact(g["exact"]) for g in sympy_data["given"]}
-    find_sym = SYMBOLS[sympy_data["find"]["symbol"]]
+
+def verify_generic(sympy_data, template, difficulty="easy"):
+    """Independent Data-Fidelity re-derivation for any parsed Template (ADR-007).
+
+    Raises :class:`FidelityError` on any (a)–(e) failure; returns ``True`` when the
+    instance is faithful. Topic-specific data is read from ``template``.
+    """
+    symbols = template.symbols
+    all_syms = set(symbols.values())
+    given = {symbols[g["symbol"]]: exact(g["exact"]) for g in sympy_data["given"]}
+    find_sym = symbols[sympy_data["find"]["symbol"]]
     find_val = exact(sympy_data["find"]["exact"])
     values = dict(given)
     values[find_sym] = find_val
 
-    _assert_equation_holds(given, find_sym, values)                      # (a)
-    _assert_independent_recompute(given, find_sym, find_val, difficulty)  # (b)
-    _assert_units_consistent(sympy_data)                                 # (c)
-    _assert_plausible(values, difficulty)                                # (d)
-    _assert_display_consistent(sympy_data)                               # (e)
+    _assert_equation_holds(template, all_syms, given, find_sym, values)              # (a)
+    _assert_independent_recompute(template, given, find_sym, find_val, difficulty)   # (b)
+    _assert_units_consistent(template, sympy_data)                                  # (c)
+    _assert_plausible(template, values, difficulty)                                 # (d)
+    _assert_display_consistent(sympy_data)                                          # (e)
     return True
 
 
-def _assert_equation_holds(given, find_sym, values):
-    """(a) The linking SUVAT relation holds exactly for the emitted values."""
-    unused = ALL_SYMS - (set(given) | {find_sym})
-    if len(unused) != 1:
-        raise FidelityError(f"(a) cannot isolate unused variable from {set(values)}")
-    eq = EQUATION_BY_EXCLUDED[next(iter(unused))]
+# -- assertions ----------------------------------------------------------------
+def _linking_equation(template, all_syms, given, find_sym):
+    """The single equation whose variables are exactly ``given ∪ {find}``."""
+    used = set(given) | {find_sym}
+    for eq in template.equations:
+        if (eq.free_symbols & all_syms) == used:
+            return eq
+    raise FidelityError(f"(a) no equation relates exactly {used}")
+
+
+def _assert_equation_holds(template, all_syms, given, find_sym, values):
+    """(a) The linking relation holds exactly for the emitted values."""
+    eq = _linking_equation(template, all_syms, given, find_sym)
     residual = sympy.simplify(eq.lhs.subs(values) - eq.rhs.subs(values))
     if residual != 0:
         raise FidelityError(f"(a) equation {eq} does not hold; residual={residual}")
 
 
-def _assert_independent_recompute(given, find_sym, find_val, difficulty):
-    """(b) Re-solve the whole SUVAT system — a path independent of the generator.
+def independent_solve(template, given, find_sym, difficulty="easy"):
+    """Re-derive ``find`` by solving the *full* equation system (build guide §10).
 
-    The ``difficulty`` is forwarded to :func:`independent_solve` so the oracle uses
-    the *same* physical root-selection rule as the generator at this band (ADR-005
-    / fix F2). Without it the recompute silently fell back to ``easy`` selection
-    and disagreed with the generator on ``medium`` / ``hard`` (e.g. negative roots).
+    Substitutes the givens into every relation and solves the resulting system for
+    the remaining unknowns — deliberately a different path from the generator's
+    single-equation solve. Applies the template's own physical root selection at the
+    requested ``difficulty`` (ADR-005 / fix F2: without the band the recompute could
+    disagree with the generator on ``medium`` / ``hard``).
     """
-    recomputed = independent_solve(given, find_sym, difficulty)
+    all_syms = set(template.symbols.values())
+    eqs = [sympy.Eq(e.lhs.subs(given), e.rhs.subs(given)) for e in template.equations]
+    unknowns = sorted(all_syms - set(given), key=lambda s: s.name)
+    sols = sympy.solve(eqs, unknowns, dict=True)
+    candidates = []
+    for sol in sols:
+        if find_sym in sol:
+            val = sympy.nsimplify(sol[find_sym])
+            if val.is_real and val.is_number:
+                candidates.append(val)
+    return template.root_select(candidates, find_sym, difficulty)
+
+
+def _assert_independent_recompute(template, given, find_sym, find_val, difficulty):
+    """(b) Re-solve the whole system — a path independent of the generator."""
+    recomputed = independent_solve(template, given, find_sym, difficulty)
     if recomputed is None:
         raise FidelityError(f"(b) independent solve found no physical {find_sym}")
     if sympy.simplify(recomputed - find_val) != 0:
@@ -86,28 +122,9 @@ def _assert_independent_recompute(given, find_sym, find_val, difficulty):
         )
 
 
-def independent_solve(given, find_sym, difficulty="easy"):
-    """Re-derive ``find`` by solving the *full* SUVAT system (build guide §10).
-
-    Substitutes the givens into all five relations and solves the resulting
-    system for the remaining unknowns — deliberately a different path from the
-    generator's single-equation solve. Applies the same physical root selection.
-    """
-    eqs = [sympy.Eq(e.lhs.subs(given), e.rhs.subs(given)) for e in suvat.EQUATIONS]
-    unknowns = sorted(ALL_SYMS - set(given), key=lambda s: s.name)
-    sols = sympy.solve(eqs, unknowns, dict=True)
-    candidates = []
-    for sol in sols:
-        if find_sym in sol:
-            val = sympy.nsimplify(sol[find_sym])
-            if val.is_real and val.is_number:
-                candidates.append(val)
-    return suvat.root_select(candidates, find_sym, difficulty)
-
-
-def _assert_units_consistent(sympy_data):
+def _assert_units_consistent(template, sympy_data):
     """(c) Every emitted unit matches the canonical unit for its symbol."""
-    canonical = {sym.name: suvat.VARIABLES[sym].unit for sym in suvat.VARIABLES}
+    canonical = {sym.name: template.variables[sym].unit for sym in template.variables}
     for g in sympy_data["given"]:
         if g["unit"] != canonical[g["symbol"]]:
             raise FidelityError(
@@ -121,11 +138,13 @@ def _assert_units_consistent(sympy_data):
         raise FidelityError("(c) final_answer unit != find unit")
 
 
-def _assert_plausible(values, difficulty):
+def _assert_plausible(template, values, difficulty):
     """(d) The template's plausibility constraints hold."""
-    for c in suvat.CONSTRAINTS:
+    for c in template.constraints:
         if not c(values, difficulty):
-            raise FidelityError(f"(d) plausibility constraint {c.__name__} failed")
+            raise FidelityError(
+                f"(d) plausibility constraint {getattr(c, '__name__', c)} failed"
+            )
 
 
 def _assert_display_consistent(sympy_data):
