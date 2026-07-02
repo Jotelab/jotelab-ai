@@ -13,6 +13,14 @@ so the math is provably correct and the language is fluent.
 > computes, alters, or "corrects" a value — it only phrases problems in Thai and draws figures.
 > This is Jotelab's entire claim over generic AI; the **Data Fidelity** benchmark exists to police it.
 
+> **Invariant scope for user-authored templates (ADR-007).** For **built-in developer templates**
+> (e.g. `suvat`) the guarantee above holds in full. For **user-authored declarative templates**
+> ([`templates/declarative/`](templates/declarative/)) it narrows: every number is the
+> *arithmetically-exact* solution of the template's declared equation set, machine-verified to be
+> dimensionally consistent and to reproduce the author's golden worked example(s). The engine no
+> longer guarantees the *equations themselves* are the correct physical laws — that is asserted by
+> the author and evidenced by the golden cases plus the `unverified`/`verified` provenance signal.
+
 ## Architecture
 
 ```
