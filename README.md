@@ -64,16 +64,54 @@ Languages: **TypeScript** for the app, **Python** for the symbolic engine and mo
 > (Python/SymPy). The layout below is the target; sections fill in as each track lands.
 
 ```
-engine/        # Python: constrained SymPy engine + topic templates (SUVAT first)
-harness/       # Data Fidelity verification harness (independent re-derivation)
-app/           # Next.js App Router (Generate + Library)
-components/    # shadcn/ui components, the A4 Canvas
-lib/           # Zod schemas (the LLM output contract), AI SDK / Supabase clients
+engine/                  # constrained SymPy engine: bounded re-roll loop, registry, contract, CLI
+templates/               # topic templates
+  base.py                #   the Template dataclass (topic-agnostic)
+  suvat.py               #   SUVAT as code — the built-in reference template
+  declarative/           #   ADR-007: declarative-template parser + 5-stage validation gate + CLI
+  data/suvat.json        #   SUVAT re-expressed as declarative data (byte-parity with suvat.py)
+harness/                 # Data Fidelity verification harness (independent re-derivation)
+app/                     # Next.js App Router (Generate + Library)
+components/              # shadcn/ui components, the A4 Canvas
+lib/                     # Zod schemas (the LLM output contract), AI SDK / Supabase clients
 ```
 
 Engineering documentation (design docs, specs, ADRs, the build guide, daily reports) is maintained
 in the separate **Jotelab documentation workspace** (`claude-test/docs/`). Start with
 **ADR-001 (Neuro-Symbolic Split)** and the **Symbolic Engine Spec** + **Build Guide**.
+
+## Declarative topic templates (ADR-007)
+
+A topic template can be **declarative JSON data** instead of Python code, so the topic library can
+grow without a developer in the authoring path. A template document declares its variables (with
+mandatory units and per-difficulty ranges), its equations as strings, a named root policy, a small
+constraint DSL, a default split, and at least one golden worked example — see
+[`templates/data/suvat.json`](templates/data/suvat.json). The engine parses it into the same
+`Template` object the code path uses; **no user Python ever executes** (equations are checked against
+an AST allow-list before `sympy.sympify`, which itself can run arbitrary code).
+
+A submitted template is admitted to the registry only after passing a fixed **five-stage automated
+gate** ([`templates/declarative/gate.py`](templates/declarative/gate.py)):
+
+1. **Parse & sandbox** — equations parse against declared symbols only; anything else is rejected.
+2. **Dimensional homogeneity** — every equation is dimensionally consistent (`sympy.physics.units`).
+3. **Solvability derivation** — the default split is auto-derived and must be generatable.
+4. **Golden-case replay** — the engine reproduces the author's worked example(s) *exactly* (ADR-005).
+5. **Convergence + fidelity** — instances generate through the real loop and pass the Data Fidelity
+   oracle at 100%.
+
+Registration happens only on all-pass; otherwise a typed `TemplateValidationError` names the failing
+stage. The gate proves *arithmetic* correctness, not *physical* truth — a self-consistent wrong
+equation (e.g. a dropped `½`) passes dimensional analysis and is caught only if a correct golden case
+disagrees. That residue is why the invariant is narrowed for user templates (see the invariant-scope
+note above) and why each template carries an `unverified`/`verified` provenance signal. Full detail:
+**Template Validation Spec** (`claude-test/docs/specs/template-validation-spec.html`).
+
+Validate a template document from the command line:
+
+```bash
+python -m templates.declarative templates/data/suvat.json   # per-stage PASS/FAIL report; exit 0 on all-pass
+```
 
 ## Prerequisites
 
@@ -103,7 +141,14 @@ in the separate **Jotelab documentation workspace** (`claude-test/docs/`). Start
 <package-manager> run dev
 
 # symbolic engine + tests (Python)
-pytest                 # unit + property tests
+pytest                 # unit + property tests (59 green: engine, harness, declarative gate, parity)
+
+# generate one fully-solved problem (fresh random by default; pin --seed/--given/--find to reproduce)
+python -m engine --difficulty easy --verify
+
+# validate a declarative topic template through the five-stage gate
+python -m templates.declarative templates/data/suvat.json
+
 # Data Fidelity: run a SUVAT seed batch through the verification harness → expect 100%
 ```
 
@@ -119,7 +164,11 @@ The engine's milestone is **Data Fidelity = 100%** on a SUVAT seed batch — whi
 
 ## Status & scope
 
-Early build, June 2026, for NSC 2026 (ครั้งที่ 28). **In scope:** high-school physics
-(kinematics/SUVAT first, then circuits, waves, thermodynamics), structural 2D TikZ diagrams,
-Thai-language output, PC/tablet. **Out of scope:** chemistry / advanced math, photorealistic or 3D
-graphics, English-language output, smartphone-first UI.
+Early build, June–July 2026, for NSC 2026 (ครั้งที่ 28). The symbolic engine hits **Data Fidelity =
+100%** on the SUVAT batch, and **ADR-007 v1** (declarative topic templates + the five-stage validation
+gate) is implemented — with `suvat` proven byte-for-byte identical whether loaded from code or from
+JSON data. **In scope:** high-school physics (kinematics/SUVAT first, then circuits, waves,
+thermodynamics), structural 2D TikZ diagrams, Thai-language output, PC/tablet. **Out of scope:**
+chemistry / advanced math, photorealistic or 3D graphics, English-language output, smartphone-first
+UI; and — deferred to the web app — the `TEMPLATES` table, the `unverified`→`verified` promotion
+policy, and any authoring UI.
