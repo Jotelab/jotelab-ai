@@ -39,6 +39,29 @@ def test_stage4_rejects_wrong_golden_case():
     assert any((not s.passed) and s.number == 4 for s in report.stages)
 
 
+def test_dropped_half_passes_dimensions_but_caught_by_golden_replay():
+    """ADR-007(d) thesis case: a self-consistent wrong equation slips past the
+    dimensional gate and is caught only by golden-case replay.
+
+    Dropping the 1/2 from ``s = u*t + a*t**2/2`` leaves it dimensionally valid
+    (both terms are a length), so stage 2 passes; but with a *correct* golden case
+    for ``s`` the engine now produces the wrong value, so stage 4 fails. This is
+    exactly the residue ADR-007 names: dimensional analysis is necessary, not
+    sufficient, and the golden case is the backstop.
+    """
+    bad = _doc()
+    bad["equations"][1] = "Eq(s, u*t + a*t**2)"  # E2 with the 1/2 dropped
+    # correct answer for {u:0, a:2, t:5}, find s, is u*t + a*t**2/2 = 25
+    bad["golden_cases"] = [{"given": {"u": 0, "a": 2, "t": 5}, "find": "s",
+                            "difficulty": "easy", "expected": "25"}]
+    report = validate_template(bad, n_smoke=4)
+    assert not report.passed
+    by_num = {s.number: s for s in report.stages}
+    assert by_num[2].passed, "dimensional analysis must NOT catch a dropped 1/2"
+    failing = [s for s in report.stages if not s.passed]
+    assert failing and failing[0].number == 4, "golden replay must catch it"
+
+
 def test_stage1_rejects_unknown_symbol():
     bad = _doc()
     bad["equations"][0] = "Eq(v, u + a*t + w)"
