@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.egg-info/
+
+# Local secrets for the engine service (ENGINE_API_KEY). Never commit; .env.example
+# is the tracked template.
+.env
