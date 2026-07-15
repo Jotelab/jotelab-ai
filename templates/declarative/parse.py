@@ -174,4 +174,5 @@ def parse_template(doc) -> Template:
         constraints=constraints.loop_predicates,
         root_select=root_select,
         default_split=(given, find),
+        signed_answer=bool(doc.get("signed_answer", False)),
     )

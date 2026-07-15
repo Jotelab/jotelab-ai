@@ -18,6 +18,7 @@ _REGISTRY = {
 
 def load_template(topic: str) -> Template:
     """Return the template for ``topic`` (e.g. ``"suvat"``)."""
+    _ensure_declarative_loaded()
     try:
         return _REGISTRY[topic]
     except KeyError:
@@ -31,6 +32,7 @@ def register(template: Template) -> None:
 
 
 def topics() -> list:
+    _ensure_declarative_loaded()
     return sorted(_REGISTRY)
 
 
@@ -43,6 +45,11 @@ def temporary(template):
     (ADR-007: register only on all-pass). Restores any previous entry — or removes
     a newly-added topic — on exit, even on error.
     """
+    # Populate declarative topics *before* snapshotting, so that entering a
+    # ``temporary`` block whose key is a declarative topic sees ``had=True`` and
+    # restores the permanent entry on exit — rather than popping it because the
+    # lazy load hadn't run yet when the snapshot was taken.
+    _ensure_declarative_loaded()
     key = template.topic
     had = key in _REGISTRY
     prev = _REGISTRY.get(key)
@@ -54,3 +61,40 @@ def temporary(template):
             _REGISTRY[key] = prev
         else:
             _REGISTRY.pop(key, None)
+
+
+# --- Declarative topic strands (ADR-007) -----------------------------------
+# Topics authored as JSON in ``templates/data/`` and vetted by the five-stage
+# validation gate in CI (``tests/test_*`` + ``python -m templates.declarative``).
+# They are parsed straight into the registry — the gate is a build-time check,
+# not an import-time cost.
+_DECLARATIVE_TOPICS = ("vectors_1d.json",)
+_declarative_loaded = False
+
+
+def _ensure_declarative_loaded() -> None:
+    """Parse and register the declarative JSON topics on first lookup.
+
+    Done lazily — on the first ``load_template``/``topics`` call — rather than at
+    registry-import time. Parsing pulls in the ``templates.declarative`` package,
+    whose ``gate`` module imports ``engine.loop.generate``; at registry-import
+    time ``engine.loop`` is still mid-initialization (the loop's own
+    ``from engine.registry import load_template`` is what triggers this module),
+    so an eager parse would deadlock the import graph. By the time anything
+    *calls* ``load_template``/``topics`` every module is fully imported. The flag
+    is set before parsing so a re-entrant lookup during load can't recurse.
+    """
+    global _declarative_loaded
+    if _declarative_loaded:
+        return
+    _declarative_loaded = True
+
+    import json
+    from pathlib import Path
+
+    from templates.declarative.parse import parse_template
+
+    data_dir = Path(__file__).resolve().parents[1] / "templates" / "data"
+    for filename in _DECLARATIVE_TOPICS:
+        template = parse_template(json.loads((data_dir / filename).read_text()))
+        _REGISTRY.setdefault(template.topic, template)

@@ -79,6 +79,18 @@ def for_(topic: str, difficulty: str) -> Policy:
     return Policy(difficulty=difficulty, **_DEFAULTS[difficulty])
 
 
+def permit_sign(policy: Policy) -> Policy:
+    """Drop the positive-answer requirement — for vector/direction topics (spec §6).
+
+    On the easy band the default tier sets ``require_positive`` so scalar answers
+    come out forward/non-negative. A signed topic (displacement, average velocity)
+    needs the sign to survive, since it *encodes direction*; this relaxes only that
+    one flag, leaving the cleanliness tier (decimal places / fractions) intact.
+    Applied by the loop when ``template.signed_answer`` is set.
+    """
+    return replace(policy, require_positive=False)
+
+
 def loosen(policy: Policy) -> Policy:
     """Relax the cleanliness tier one notch (spec §5, §6).
 

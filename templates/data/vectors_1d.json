@@ -1,0 +1,24 @@
+{
+  "topic": "vectors-1d",
+  "variables": {
+    "s": {"unit": "m",   "ranges": {"easy": [1, 20, true],  "medium": [1, 60, true],  "hard": [1, 120, true]}},
+    "t": {"unit": "s",   "ranges": {"easy": [1, 10, false], "medium": [1, 20, false], "hard": [1, 30, false]}},
+    "v": {"unit": "m/s", "ranges": {"easy": [1, 20, true],  "medium": [1, 60, true],  "hard": [1, 100, true]}}
+  },
+  "equations": [
+    "Eq(v, s/t)"
+  ],
+  "root_policy": {"name": "signed_physical"},
+  "constraints": [
+    {"var": "t", "op": ">",     "value": 0},
+    {"var": "v", "op": "abs<=", "value": 100},
+    {"var": "s", "op": "abs<=", "value": 100000}
+  ],
+  "signed_answer": true,
+  "default_split": {"given": ["s", "t"], "find": "v"},
+  "golden_cases": [
+    {"given": {"s": -12, "t": 4}, "find": "v", "difficulty": "easy", "expected": "-3"},
+    {"given": {"s": 30, "t": 5}, "find": "v", "difficulty": "easy", "expected": "6"}
+  ],
+  "trust_state": "unverified"
+}

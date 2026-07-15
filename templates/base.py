@@ -51,6 +51,7 @@ class Template:
     constraints: list  # list[predicate(values: dict, difficulty: str) -> bool]
     root_select: Callable  # (values: list, find, difficulty) -> chosen value | None
     default_split: tuple  # (given_symbols, find_symbol) for Basic mode
+    signed_answer: bool = False  # vector/direction topics: allow a negative answer
 
     # -- convenience accessors -------------------------------------------------
 

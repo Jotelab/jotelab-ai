@@ -57,6 +57,8 @@ def generate(topic, given=None, find=None, conditions=None, difficulty="easy",
         )
 
     pol = policy_mod.for_(topic, difficulty)
+    if template.signed_answer:
+        pol = policy_mod.permit_sign(pol)  # vector topics: keep the direction sign
 
     for attempt in range(1, max_attempts + 1):
         inputs = sampling.sample(template, given, conditions, difficulty, seed + attempt)
