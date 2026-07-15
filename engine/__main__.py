@@ -142,10 +142,15 @@ def main(argv=None):
 
     verified = None
     if args.verify:
-        from harness.verify import FidelityError, verify
+        from harness.verify import FidelityError, verify_generic
         try:
-            verified = verify(data, difficulty=args.difficulty)
-        except (FidelityError, NotImplementedError) as exc:
+            # verify_generic reads the topic's symbols/equations/units/constraints
+            # off its own template, so --verify works for every topic (SUVAT and
+            # every declarative strand), not just SUVAT.
+            verified = verify_generic(
+                data, load_template(args.topic), difficulty=args.difficulty
+            )
+        except FidelityError as exc:
             verified = False
             print(f"verify error: {exc}", file=sys.stderr)
 

@@ -62,6 +62,23 @@ def test_cli_advanced_json_verify(capsys):
     assert data["find"] == {"symbol": "v", "value": 10, "exact": "10", "unit": "m/s"}
 
 
+def test_cli_generates_and_verifies_declarative_topic(capsys):
+    """--verify works for a declarative topic (vectors-1d), not just SUVAT.
+
+    Also exercises the signed path: a pinned negative displacement yields a
+    negative average velocity, and the Data Fidelity check passes (rc 0).
+    """
+    rc = main([
+        "--topic", "vectors-1d", "--given", "s,t", "--find", "v",
+        "--condition", "s=-12", "--condition", "t=4",
+        "--json", "--verify",
+    ])
+    out = capsys.readouterr().out
+    assert rc == 0
+    data = json.loads(out)
+    assert data["find"] == {"symbol": "v", "value": -3, "exact": "-3", "unit": "m/s"}
+
+
 def test_cli_unsolvable_exits_nonzero(capsys):
     """An unsolvable request reports an error and exits non-zero."""
     rc = main(["--given", "u,a", "--find", "v"])
