@@ -1,0 +1,24 @@
+{
+  "topic": "relative-velocity",
+  "variables": {
+    "va":  {"unit": "m/s", "ranges": {"easy": [1, 20, true], "medium": [1, 50, true], "hard": [1, 100, true]}},
+    "vb":  {"unit": "m/s", "ranges": {"easy": [1, 20, true], "medium": [1, 50, true], "hard": [1, 100, true]}},
+    "vab": {"unit": "m/s", "ranges": {"easy": [1, 40, true], "medium": [1, 100, true], "hard": [1, 200, true]}}
+  },
+  "equations": [
+    "Eq(va, vab + vb)"
+  ],
+  "root_policy": {"name": "signed_physical"},
+  "constraints": [
+    {"var": "va",  "op": "abs<=", "value": 200},
+    {"var": "vb",  "op": "abs<=", "value": 200},
+    {"var": "vab", "op": "abs<=", "value": 400}
+  ],
+  "signed_answer": true,
+  "default_split": {"given": ["va", "vb"], "find": "vab"},
+  "golden_cases": [
+    {"given": {"va": 20, "vb": 12}, "find": "vab", "difficulty": "easy", "expected": "8"},
+    {"given": {"va": -10, "vb": 5}, "find": "vab", "difficulty": "easy", "expected": "-15"}
+  ],
+  "trust_state": "unverified"
+}
