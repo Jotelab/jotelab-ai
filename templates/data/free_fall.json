@@ -1,0 +1,32 @@
+{
+  "topic": "free-fall",
+  "variables": {
+    "u": {"unit": "m/s",   "ranges": {"easy": [0, 10, false], "medium": [0, 20, false], "hard": [0, 30, false]}},
+    "v": {"unit": "m/s",   "ranges": {"easy": [0, 40, false], "medium": [0, 90, false], "hard": [0, 150, false]}},
+    "t": {"unit": "s",     "ranges": {"easy": [1, 5, false],  "medium": [1, 8, false],  "hard": [1, 12, false]}},
+    "h": {"unit": "m",     "ranges": {"easy": [1, 120, false], "medium": [1, 320, false], "hard": [1, 900, false]}},
+    "g": {"unit": "m/s^2", "ranges": {"easy": [10, 10, false], "medium": [10, 10, false], "hard": [10, 10, false]}}
+  },
+  "equations": [
+    "Eq(v, u + g*t)",
+    "Eq(h, u*t + g*t**2/2)",
+    "Eq(v**2, u**2 + 2*g*h)",
+    "Eq(h, (u + v)*t/2)",
+    "Eq(h, v*t - g*t**2/2)"
+  ],
+  "root_policy": {"name": "smallest_positive_physical", "nonneg_fallback_vars": ["u", "v", "h"]},
+  "constraints": [
+    {"var": "g", "op": "==",    "value": 10},
+    {"var": "t", "op": ">",     "value": 0},
+    {"var": "u", "op": ">=",    "value": 0},
+    {"var": "v", "op": ">=",    "value": 0},
+    {"var": "h", "op": ">=",    "value": 0},
+    {"var": "v", "op": "abs<=", "value": 200}
+  ],
+  "default_split": {"given": ["u", "g", "t"], "find": "v"},
+  "golden_cases": [
+    {"given": {"u": 0, "g": 10, "t": 3}, "find": "v", "difficulty": "easy", "expected": "30"},
+    {"given": {"u": 5, "g": 10, "t": 2}, "find": "h", "difficulty": "easy", "expected": "30"}
+  ],
+  "trust_state": "unverified"
+}
