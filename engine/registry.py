@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 
+from templates.average_speed import AVERAGE_SPEED
 from templates.base import Template
 from templates.distance_displacement import DISTANCE_DISPLACEMENT
 from templates.suvat import SUVAT
@@ -15,6 +16,7 @@ from templates.suvat import SUVAT
 _REGISTRY = {
     SUVAT.topic: SUVAT,
     DISTANCE_DISPLACEMENT.topic: DISTANCE_DISPLACEMENT,
+    AVERAGE_SPEED.topic: AVERAGE_SPEED,
 }
 
 
