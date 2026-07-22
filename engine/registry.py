@@ -11,6 +11,7 @@ import contextlib
 from templates.average_speed import AVERAGE_SPEED
 from templates.base import Template
 from templates.distance_displacement import DISTANCE_DISPLACEMENT
+from templates.motion_graphs import MOTION_GRAPHS
 from templates.multi_stage import MULTI_STAGE
 from templates.suvat import SUVAT
 from templates.upward_throw import UPWARD_THROW
@@ -21,6 +22,7 @@ _REGISTRY = {
     AVERAGE_SPEED.topic: AVERAGE_SPEED,
     UPWARD_THROW.topic: UPWARD_THROW,
     MULTI_STAGE.topic: MULTI_STAGE,
+    MOTION_GRAPHS.topic: MOTION_GRAPHS,
 }
 
 
