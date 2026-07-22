@@ -52,6 +52,7 @@ class Template:
     root_select: Callable  # (values: list, find, difficulty) -> chosen value | None
     default_split: tuple  # (given_symbols, find_symbol) for Basic mode
     signed_answer: bool = False  # vector/direction topics: allow a negative answer
+    graph_spec: Callable = None  # optional: values -> JSON-able graph payload ("graph" key)
 
     # -- convenience accessors -------------------------------------------------
 

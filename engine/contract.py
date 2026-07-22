@@ -117,7 +117,7 @@ def build_sympy_data(template, given, find, inputs, value, sym_expr, seed, polic
     ]
     find_unit = template.unit_for(find)
     steps = [build_step(find, sym_expr, inputs, value, find_unit)]
-    return {
+    data = {
         "topic": template.topic,
         "seed": seed,
         "given": given_out,
@@ -133,3 +133,8 @@ def build_sympy_data(template, given, find, inputs, value, sym_expr, seed, polic
         "policy_applied": policy.label,
         "plausible": bool(plausible),
     }
+    if template.graph_spec is not None:
+        values = dict(inputs)
+        values[find] = value
+        data["graph"] = template.graph_spec(values)
+    return data
