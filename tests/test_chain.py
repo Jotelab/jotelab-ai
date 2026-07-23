@@ -169,3 +169,46 @@ def test_chain_sweep_across_bands():
     for band in ("easy", "medium"):
         data = generate_chain(parts2, difficulty=band, seed=5)
         assert verify_chain(data, difficulty=band) is True
+
+
+# -- tests for the CLI --part flags --------------------------------------------
+
+from engine.__main__ import main
+
+
+def test_cli_chain_json_verify(capsys):
+    rc = main([
+        "--part", "free-fall", "--part", "suvat:u,a,t:s:u",
+        "--seed", "7", "--json", "--verify",
+    ])
+    out = capsys.readouterr().out
+    assert rc == 0
+    data = json.loads(out)
+    assert data["topic"] == "mixed"
+    assert data["topics"] == ["free-fall", "suvat"]
+
+
+def test_cli_chain_auto_receive(capsys):
+    """suvat given u,a,t has exactly one m/s given (u) — receive is inferred."""
+    rc = main(["--part", "free-fall", "--part", "suvat:u,a,t:s", "--seed", "7"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "topic: mixed (free-fall + suvat)" in out
+    assert "part 1" in out and "part 2" in out
+
+
+def test_cli_chain_ambiguous_receive_is_loud():
+    """suvat given u,v,t (find s) has two m/s givens — must demand :RECEIVE."""
+    with pytest.raises(SystemExit, match="u.*v|v.*u"):
+        main(["--part", "free-fall", "--part", "suvat:u,v,t:s"])
+
+
+def test_cli_chain_needs_two_parts():
+    with pytest.raises(SystemExit, match="at least two"):
+        main(["--part", "free-fall"])
+
+
+def test_cli_chain_rejects_topic_mix():
+    with pytest.raises(SystemExit, match="--part cannot be combined"):
+        main(["--part", "free-fall", "--part", "suvat:u,a,t:s:u",
+              "--given", "u,a,t"])
