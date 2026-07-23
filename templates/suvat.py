@@ -158,11 +158,3 @@ SUVAT = Template(
     root_select=root_select,
     default_split=((u, a, t), v),  # spec §8 worked example
 )
-
-
-def equation_for(given, find):
-    """Return the single SUVAT relation linking ``given ∪ {find}`` (or raise)."""
-    ok, info = solvability(given, find)
-    if not ok:
-        raise ValueError(info)
-    return info

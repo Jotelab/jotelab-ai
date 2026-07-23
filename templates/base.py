@@ -86,3 +86,37 @@ class Template:
                     if ok:
                         splits.append((given, find))
         return splits
+
+
+# -- shared root-selection primitives ------------------------------------------
+# Every code template's `root_select` composes the same three moves: normalize
+# the solver's candidates to exact real numbers, then pick by the topic's sign
+# convention. (The declarative path has its own copies in
+# ``templates/declarative/roots.py``, kept separate on purpose — that module is
+# part of the sandboxed JSON contract.)
+
+def real_candidates(values):
+    """Normalize solver output to exact real numeric candidates (nsimplify)."""
+    real = []
+    for val in values:
+        val = sympy.nsimplify(val)
+        if val.is_real and val.is_number:
+            real.append(val)
+    return real
+
+
+def smallest_positive(reals):
+    """Smallest strictly-positive candidate, or ``None`` (a failed roll)."""
+    pos = [x for x in reals if x.is_positive]
+    return min(pos) if pos else None
+
+
+def smallest_nonnegative(reals):
+    """Smallest non-negative candidate, or ``None`` (a failed roll)."""
+    nonneg = [x for x in reals if x.is_nonnegative]
+    return min(nonneg) if nonneg else None
+
+
+def signed_smallest(reals):
+    """Signed pick: smallest magnitude, negative before positive on a tie."""
+    return min(reals, key=lambda x: (abs(float(x)), float(x)))
