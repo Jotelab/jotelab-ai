@@ -141,13 +141,18 @@ python -m templates.declarative templates/data/suvat.json   # per-stage PASS/FAI
 <package-manager> run dev
 
 # symbolic engine + tests (Python)
-pytest                 # unit + property tests (131 green: engine, harness, declarative gate, parity, topics)
+pytest                 # unit + property tests (153 green: engine, harness, declarative gate, parity, topics, chains)
 
 # generate one fully-solved problem (fresh random by default; pin --seed/--given/--find to reproduce)
 python -m engine --difficulty easy --verify
 
 # validate a declarative topic template through the five-stage gate
 python -m templates.declarative templates/data/suvat.json
+
+# mixed (chained) problem: part 1's answer feeds a given of part 2
+# --part TOPIC[:given,csv:find[:receive]] (2+ parts; receive auto-picked when unambiguous)
+python -m engine --part free-fall --part suvat:u,a,t:s:u --verify
+pytest tests/test_chain.py     # chain layer: links, typed errors, CLI, fidelity sweep
 
 # Data Fidelity: run a SUVAT seed batch through the verification harness → expect 100%
 ```
