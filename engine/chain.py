@@ -36,8 +36,12 @@ def generate_chain(parts, difficulty="easy", seed=0,
     re-rolls (``max_attempts``, when set, is forwarded to each part's inner
     loop). Raises :class:`ChainSpecError` / :class:`IncompatibleLinkError` at
     validation, or re-raises the last :class:`NoCleanInstanceError` when the
-    bounded re-rolls are exhausted.
+    bounded re-rolls are exhausted. UnsolvableError or OverDeterminedError from
+    an invalid split propagate immediately; re-rolling cannot fix a structurally
+    unsolvable split.
     """
+    if max_chain_attempts < 1:
+        raise ChainSpecError("max_chain_attempts must be at least 1")
     resolved = _validate(parts)
     gen_kwargs = {} if max_attempts is None else {"max_attempts": max_attempts}
     last_err = None

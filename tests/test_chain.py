@@ -137,6 +137,11 @@ def test_bounded_failure_raises_no_clean_instance():
         generate_chain(parts, seed=1, max_chain_attempts=2, max_attempts=5)
 
 
+def test_nonpositive_chain_attempts_rejected():
+    with pytest.raises(ChainSpecError, match="at least 1"):
+        generate_chain(PARTS, max_chain_attempts=0)
+
+
 # -- tests for verify_chain ---------------------------------------------------
 
 from harness.verify import FidelityError, verify_chain
