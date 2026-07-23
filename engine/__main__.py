@@ -201,7 +201,6 @@ def _render_chain(data, verified):
 def _run_chain(args):
     """Generate, optionally verify, and print a chained mixed problem."""
     from engine.chain import generate_chain
-    from engine.errors import EngineError
 
     seed = args.seed if args.seed is not None else random.randrange(1_000_000)
     parts = [_parse_part(spec) for spec in args.part]
@@ -209,6 +208,9 @@ def _run_chain(args):
         _resolve_receives(parts)
         data = generate_chain(parts, difficulty=args.difficulty, seed=seed)
     except EngineError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    except KeyError as exc:  # unknown topic / variable name
         print(f"error: {exc}", file=sys.stderr)
         return 1
     verified = None

@@ -212,3 +212,11 @@ def test_cli_chain_rejects_topic_mix():
     with pytest.raises(SystemExit, match="--part cannot be combined"):
         main(["--part", "free-fall", "--part", "suvat:u,a,t:s:u",
               "--given", "u,a,t"])
+
+
+def test_cli_chain_unknown_topic_is_loud(capsys):
+    """An unknown --part topic reports error: ... and exits 1, no traceback."""
+    rc = main(["--part", "bogus-topic", "--part", "suvat:u,a,t:s:u"])
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "error:" in err and "bogus-topic" in err
