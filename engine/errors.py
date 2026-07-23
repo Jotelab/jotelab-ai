@@ -69,3 +69,34 @@ class NoCleanInstanceError(EngineError):
         super().__init__(
             f"[{topic}] no clean instance for find={find} after {attempts} attempts"
         )
+
+
+class ChainSpecError(EngineError):
+    """A chained (mixed) problem spec is malformed (chain design doc).
+
+    Raised at validation, before any part is generated: fewer than two parts,
+    a missing/unknown ``receive`` variable, or a ``receive`` not among that
+    part's givens.
+    """
+
+    def __init__(self, reason):
+        self.reason = reason
+        super().__init__(f"[mixed] invalid chain spec: {reason}")
+
+
+class IncompatibleLinkError(EngineError):
+    """A chain link's units don't match (chain design doc).
+
+    The receiving given of one part must carry the same unit as the previous
+    part's find; raised at validation, before any part is generated.
+    """
+
+    def __init__(self, topic, symbol, receive_unit, feed_unit):
+        self.topic = topic
+        self.symbol = symbol
+        self.receive_unit = receive_unit
+        self.feed_unit = feed_unit
+        super().__init__(
+            f"[{topic}] link into {symbol!r} expects {receive_unit}, but the "
+            f"previous part's answer is {feed_unit}"
+        )

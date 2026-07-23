@@ -27,3 +27,14 @@ def test_pinned_integer_condition_stays_integer():
     inputs = sampling.sample(template, (u, a, t), {"u": 5}, "easy", seed=1)
     assert inputs[u] == sympy.Integer(5)
     assert inputs[u].is_Integer
+
+
+from engine.errors import ChainSpecError, EngineError, IncompatibleLinkError
+
+
+def test_chain_errors_are_typed_engine_errors():
+    assert issubclass(ChainSpecError, EngineError)
+    assert issubclass(IncompatibleLinkError, EngineError)
+    err = IncompatibleLinkError("suvat", "t", "s", "m/s")
+    assert err.topic == "suvat" and err.symbol == "t"
+    assert "expects s" in str(err) and "m/s" in str(err)
