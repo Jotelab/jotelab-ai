@@ -38,6 +38,36 @@ def test_cli_default_is_random(capsys):
     assert _seed_of(first) != _seed_of(second)
 
 
+def _topic_of(out):
+    return re.search(r"topic:\s*(\S+)", out).group(1)
+
+
+def test_cli_bare_run_picks_a_random_topic(capsys):
+    """A bare `python -m engine` draws a random registered topic each run.
+
+    Across many seeded runs the topic varies (it is not pinned to suvat); every
+    emitted topic is a real registered one. Seeding stdlib random keeps the test
+    deterministic while still exercising the random-topic path.
+    """
+    from engine.registry import topics as registered_topics
+
+    known = set(registered_topics())
+    seen = set()
+    for s in range(25):
+        random.seed(s)
+        assert main([]) == 0
+        seen.add(_topic_of(capsys.readouterr().out))
+    assert seen <= known
+    assert len(seen) > 1  # not pinned to a single topic
+
+
+def test_cli_given_find_without_topic_stays_suvat(capsys):
+    """--given/--find without --topic keeps suvat (those splits are suvat's)."""
+    random.seed(0)
+    assert main(["--given", "u,a,t", "--find", "v"]) == 0
+    assert "topic: suvat" in capsys.readouterr().out
+
+
 def test_cli_pinned_is_reproducible(capsys):
     """Pinning the split and seed reproduces byte-identical output."""
     argv = ["--given", "u,a,t", "--find", "v", "--seed", "42"]

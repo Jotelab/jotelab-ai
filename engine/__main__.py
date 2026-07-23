@@ -13,10 +13,13 @@ reproducible by passing that seed (and split) back. Provide ``--seed`` and/or
 
 Examples::
 
-    # Basic mode — a different random clean SUVAT problem each run
+    # Basic mode — a fresh clean problem in a random topic each run
     python -m engine
 
-    # Reproduce a specific problem (pin the split and the seed)
+    # Pin the topic (still a fresh random split + seed each run)
+    python -m engine --topic free-fall
+
+    # Reproduce a specific problem (pin the split and the seed; defaults to suvat)
     python -m engine --given u,a,t --find v --seed 42
 
     # Advanced mode — pin Given values, choose the Find target
@@ -62,7 +65,8 @@ def _build_parser():
         description="Generate a clean, fully-solved physics problem (SymPy engine).",
     )
     p.add_argument("--topic", default=None,
-                   help=f"topic template (known: {', '.join(topics())})")
+                   help=f"topic template (default: a random one each run; "
+                        f"known: {', '.join(topics())})")
     p.add_argument("--part", action="append", default=None,
                    metavar="TOPIC[:GIVEN,CSV:FIND[:RECEIVE]]",
                    help="chain part (repeat 2+ times for a mixed problem); "
@@ -105,6 +109,21 @@ def _render_human(data, verified):
     if verified is not None:
         lines.append(f"data-fidelity verify: {'PASS' if verified else 'FAIL'}")
     return "\n".join(lines)
+
+
+def _resolve_topic(args):
+    """Pick the topic: explicit ``--topic`` wins; otherwise a fresh random topic.
+
+    A bare ``python -m engine`` draws a random registered topic each run (a fresh
+    problem in a fresh strand). ``--given``/``--find`` without ``--topic`` keeps
+    ``suvat`` — those splits are SUVAT's variables, the historical default for
+    the pinned-split flags.
+    """
+    if args.topic:
+        return args.topic
+    if args.given is None and args.find is None:
+        return random.choice(topics())
+    return "suvat"
 
 
 def _random_split(topic):
@@ -241,7 +260,7 @@ def main(argv=None):
             raise SystemExit("a mixed problem needs at least two --part flags")
         return _run_chain(args)
 
-    topic = args.topic or "suvat"
+    topic = _resolve_topic(args)
 
     # Fresh-by-default (unless pinned): random seed if none given, and a random
     # valid split if neither --given nor --find was provided.
