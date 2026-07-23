@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import sympy
 
-from .base import Template, VarSpec
+from .base import (Template, VarSpec, real_candidates, signed_smallest,
+                   smallest_nonnegative)
 
 # -- symbols -------------------------------------------------------------------
 d1, d2, t, sp, vavg = sympy.symbols("d1 d2 t sp vavg", real=True)
@@ -67,17 +68,12 @@ def root_select(values, find, difficulty):
     Average speed is a non-negative scalar; average velocity is signed (the sign
     is the direction, out-and-back legitimately gives zero).
     """
-    real = []
-    for val in values:
-        val = sympy.nsimplify(val)
-        if val.is_real and val.is_number:
-            real.append(val)
+    real = real_candidates(values)
     if not real:
         return None
     if find is sp:
-        nonneg = [x for x in real if x.is_nonnegative]
-        return min(nonneg) if nonneg else None
-    return min(real, key=lambda x: (abs(float(x)), float(x)))
+        return smallest_nonnegative(real)
+    return signed_smallest(real)
 
 
 # -- plausibility constraints --------------------------------------------------

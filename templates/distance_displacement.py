@@ -19,7 +19,8 @@ from __future__ import annotations
 
 import sympy
 
-from .base import Template, VarSpec
+from .base import (Template, VarSpec, real_candidates, signed_smallest,
+                   smallest_nonnegative)
 
 # -- symbols (real; the two path segments and the two derived quantities) ------
 d1, d2, disp, dist = sympy.symbols("d1 d2 disp dist", real=True)
@@ -71,17 +72,12 @@ def root_select(values, find, difficulty):
     Distance is a non-negative scalar; displacement is signed. No positivity is
     imposed on displacement (that is the whole point — it carries direction).
     """
-    real = []
-    for val in values:
-        val = sympy.nsimplify(val)
-        if val.is_real and val.is_number:
-            real.append(val)
+    real = real_candidates(values)
     if not real:
         return None
     if find is dist:
-        nonneg = [v for v in real if v.is_nonnegative]
-        return min(nonneg) if nonneg else None
-    return min(real, key=lambda x: (abs(float(x)), float(x)))
+        return smallest_nonnegative(real)
+    return signed_smallest(real)
 
 
 # -- plausibility constraints --------------------------------------------------

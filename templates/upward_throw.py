@@ -21,7 +21,8 @@ from __future__ import annotations
 
 import sympy
 
-from .base import Template, VarSpec
+from .base import (Template, VarSpec, real_candidates, signed_smallest,
+                   smallest_nonnegative, smallest_positive)
 
 # -- symbols -------------------------------------------------------------------
 u, v, g, t, h = sympy.symbols("u v g t h", real=True)
@@ -83,20 +84,14 @@ def root_select(values, find, difficulty):
     Time must be positive; height and launch speed non-negative (u > 0 is then
     enforced by constraint); the velocity keeps its sign — that is the point.
     """
-    real = []
-    for val in values:
-        val = sympy.nsimplify(val)
-        if val.is_real and val.is_number:
-            real.append(val)
+    real = real_candidates(values)
     if not real:
         return None
     if find is t:
-        pos = [x for x in real if x.is_positive]
-        return min(pos) if pos else None
+        return smallest_positive(real)
     if find in (h, u):
-        nonneg = [x for x in real if x.is_nonnegative]
-        return min(nonneg) if nonneg else None
-    return min(real, key=lambda x: (abs(float(x)), float(x)))  # v: signed
+        return smallest_nonnegative(real)
+    return signed_smallest(real)  # v: signed
 
 
 # -- plausibility constraints --------------------------------------------------

@@ -23,7 +23,7 @@ import sympy
 
 from engine.contract import to_display, to_exact
 
-from .base import Template
+from .base import Template, real_candidates, signed_smallest
 from .multi_stage import (CONSTRAINTS, E_S_A, E_S_V, EQUATIONS, SYMBOLS,
                           VARIABLES, a, s, t1, t2, u, v)
 from .multi_stage import root_select as _multi_stage_root_select
@@ -52,14 +52,8 @@ def root_select(values, find, difficulty):
     """Delegate to multi-stage, except ``a`` — the slope is signed
     (deceleration graphs slope down)."""
     if find is a:
-        real = []
-        for val in values:
-            val = sympy.nsimplify(val)
-            if val.is_real and val.is_number:
-                real.append(val)
-        if not real:
-            return None
-        return min(real, key=lambda x: (abs(float(x)), float(x)))
+        real = real_candidates(values)
+        return signed_smallest(real) if real else None
     return _multi_stage_root_select(values, find, difficulty)
 
 

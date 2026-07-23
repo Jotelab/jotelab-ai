@@ -25,7 +25,8 @@ from __future__ import annotations
 
 import sympy
 
-from .base import Template, VarSpec
+from .base import (Template, VarSpec, real_candidates, smallest_nonnegative,
+                   smallest_positive)
 
 # -- symbols -------------------------------------------------------------------
 u, a, t1, t2, v, s = sympy.symbols("u a t1 t2 v s", real=True)
@@ -84,18 +85,12 @@ def root_select(values, find, difficulty):
     ``s`` and ``v`` must be positive (one-directional motion); ``u`` may be
     zero (start from rest).
     """
-    real = []
-    for val in values:
-        val = sympy.nsimplify(val)
-        if val.is_real and val.is_number:
-            real.append(val)
+    real = real_candidates(values)
     if not real:
         return None
     if find is u:
-        nonneg = [x for x in real if x.is_nonnegative]
-        return min(nonneg) if nonneg else None
-    pos = [x for x in real if x.is_positive]
-    return min(pos) if pos else None
+        return smallest_nonnegative(real)
+    return smallest_positive(real)
 
 
 # -- plausibility constraints --------------------------------------------------

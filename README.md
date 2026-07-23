@@ -141,7 +141,7 @@ python -m templates.declarative templates/data/suvat.json   # per-stage PASS/FAI
 <package-manager> run dev
 
 # symbolic engine + tests (Python)
-pytest                 # unit + property tests (59 green: engine, harness, declarative gate, parity)
+pytest                 # unit + property tests (131 green: engine, harness, declarative gate, parity, topics)
 
 # generate one fully-solved problem (fresh random by default; pin --seed/--given/--find to reproduce)
 python -m engine --difficulty easy --verify
