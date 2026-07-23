@@ -6,8 +6,9 @@ single integer (spec §5, §7). Sampled values are SymPy ``Integer`` objects, ne
 Python floats — floats reintroduce the rounding error the project exists to avoid
 (build guide §6 "exact arithmetic note").
 
-``conditions`` lets the caller pin a variable (Advanced mode): either an exact
-value, or a ``(lo, hi)`` / ``(lo, hi, signed)`` range override. Conditions may be
+``conditions`` lets the caller pin a variable (Advanced mode / chain links):
+either an exact value (any ``nsimplify``-able number, e.g. ``5`` or ``"7/2"``),
+or a ``(lo, hi)`` / ``(lo, hi, signed)`` range override. Conditions may be
 keyed by the SymPy symbol or by its name.
 """
 
@@ -36,7 +37,9 @@ def sample(template, given, conditions, difficulty, seed):
                 mag = -mag
             inputs[sym] = sympy.Integer(mag)
         else:
-            inputs[sym] = sympy.Integer(spec)  # an exact pinned value
+            # An exact pinned value — nsimplify keeps integers Integer and
+            # accepts exact non-integers (e.g. "7/2" from a chain link, ADR-005).
+            inputs[sym] = sympy.nsimplify(spec)
     return inputs
 
 
