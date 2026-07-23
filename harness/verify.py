@@ -22,6 +22,9 @@ The core, :func:`verify_generic`, works for **any** parsed :class:`Template`
 constraints, root policy — is read from the passed template, not imported from a
 particular topic module. :func:`verify` keeps the SUVAT-specific public entry point
 and delegates to the generic core, so existing callers are unchanged.
+
+:func:`verify_chain` extends the oracle to chained mixed instances: every part
+runs through :func:`verify_generic`, then each link is asserted exact.
 """
 
 from __future__ import annotations
@@ -168,3 +171,44 @@ def _assert_display_consistent(sympy_data):
             f"(e) final_answer.exact {sympy_data['final_answer']['exact']!r} != "
             f"find.exact {sympy_data['find']['exact']!r}"
         )
+
+
+def verify_chain(chain_data, difficulty="easy"):
+    """Data-Fidelity check for a chained mixed instance (chain design doc).
+
+    Every part must pass the full (a)–(e) :func:`verify_generic` battery with
+    its own template, and every link must carry the previous part's answer
+    exactly: the receiving given's ``exact`` equals the feeding part's
+    ``final_answer.exact`` (compared symbolically), units agree, and the
+    recorded link ``exact`` matches. Raises :class:`FidelityError` on any
+    failure; returns ``True`` when the whole chain is faithful.
+    """
+    for part in chain_data["parts"]:
+        verify_generic(part, load_template(part["topic"]), difficulty)
+    for link in chain_data["links"]:
+        feed = chain_data["parts"][link["from_part"]]["final_answer"]
+        receiving = chain_data["parts"][link["to_part"]]
+        recv = next(
+            (g for g in receiving["given"] if g["symbol"] == link["symbol"]),
+            None,
+        )
+        if recv is None:
+            raise FidelityError(
+                f"(link) part {link['to_part'] + 1} has no given "
+                f"{link['symbol']!r}"
+            )
+        if sympy.simplify(exact(recv["exact"]) - exact(feed["exact"])) != 0:
+            raise FidelityError(
+                f"(link) received {recv['exact']!r} != fed answer "
+                f"{feed['exact']!r}"
+            )
+        if recv["unit"] != feed["unit"]:
+            raise FidelityError(
+                f"(link) unit {recv['unit']} != fed unit {feed['unit']}"
+            )
+        if link["exact"] != feed["exact"]:
+            raise FidelityError(
+                f"(link) recorded link exact {link['exact']!r} != "
+                f"final_answer.exact {feed['exact']!r}"
+            )
+    return True

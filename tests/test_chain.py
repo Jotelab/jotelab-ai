@@ -135,3 +135,37 @@ def test_bounded_failure_raises_no_clean_instance():
     ]
     with pytest.raises(NoCleanInstanceError):
         generate_chain(parts, seed=1, max_chain_attempts=2, max_attempts=5)
+
+
+# -- tests for verify_chain ---------------------------------------------------
+
+from harness.verify import FidelityError, verify_chain
+
+
+def test_verify_chain_passes_on_generated_chain():
+    data = generate_chain(PARTS, difficulty="easy", seed=7)
+    assert verify_chain(data, difficulty="easy") is True
+
+
+def test_verify_chain_catches_tampered_link():
+    """Tamper only the recorded link — parts stay individually valid, so this
+    isolates the link assertion (a broken given would trip part checks first)."""
+    data = generate_chain(PARTS, difficulty="easy", seed=7)
+    data["links"][0]["exact"] = "999999"
+    with pytest.raises(FidelityError, match=r"\(link\)"):
+        verify_chain(data, difficulty="easy")
+
+
+def test_chain_sweep_across_bands():
+    """Generate + fully verify representative chains on every difficulty band."""
+    for band in ("easy", "medium", "hard"):
+        data = generate_chain(PARTS, difficulty=band, seed=5)
+        assert verify_chain(data, difficulty=band) is True
+    parts2 = [
+        {"topic": "suvat", "given": ["u", "a", "t"], "find": "v"},
+        {"topic": "upward-throw", "given": ["u", "g", "t"], "find": "h",
+         "receive": "u"},
+    ]
+    for band in ("easy", "medium"):
+        data = generate_chain(parts2, difficulty=band, seed=5)
+        assert verify_chain(data, difficulty=band) is True
