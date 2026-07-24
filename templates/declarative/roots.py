@@ -43,6 +43,7 @@ def _signed_fallback_config(policy):
             "signed_fallback_vars must be a non-empty list of variable names")
     bands = policy.get("signed_fallback_difficulties", ["medium", "hard"])
     if (not isinstance(bands, list) or not bands
+            or not all(isinstance(b, str) for b in bands)
             or not set(bands) <= _DIFFICULTIES):
         raise ValueError("signed_fallback_difficulties must be a non-empty "
                          "subset of easy/medium/hard")

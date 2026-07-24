@@ -105,3 +105,14 @@ def test_signed_fallback_difficulties_require_vars():
               "signed_fallback_difficulties": ["medium"]}
     with pytest.raises(ValueError):
         _signed_rs(policy)
+
+
+def test_signed_fallback_unhashable_difficulty_rejected():
+    with pytest.raises(ValueError):
+        _signed_rs({**SIGNED_POLICY,
+                    "signed_fallback_difficulties": ["medium", ["hard"]]})
+
+
+def test_signed_fallback_mixed_type_vars_rejected():
+    with pytest.raises(ValueError):
+        _signed_rs({**SIGNED_POLICY, "signed_fallback_vars": ["v", 5]})
