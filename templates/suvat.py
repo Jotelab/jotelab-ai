@@ -85,9 +85,13 @@ def solvability(given, find):
 def root_select(values, find, difficulty):
     """Pick the physical root from candidate solved values.
 
-    Convention (locked in build guide §3): evaluate all real roots at the
-    sampled inputs, discard non-physical ones, and take the **smallest strictly
-    positive real root**. Returns ``None`` (a failed roll) if none survive.
+    Convention (locked in build guide §3, extended by the 2026-07-24 signed-
+    fallback spec): evaluate all real roots at the sampled inputs, discard
+    non-physical ones, and take the **smallest strictly positive real root**.
+    When none exists: a lone non-negative root is allowed for ``u``/``s``/``v``
+    (zero is legitimate), and at medium/hard a negative root (smallest
+    magnitude) is allowed for the direction-carrying finds ``v``/``s``/``a``.
+    Returns ``None`` (a failed roll) if none survive.
     """
     physical = []
     for val in values:
@@ -105,6 +109,12 @@ def root_select(values, find, difficulty):
     nonneg = [val for val in physical if val.is_nonnegative]
     if nonneg and find in (u, s, v):
         return min(nonneg)
+    # Signed fallback (spec 2026-07-24): at medium/hard a direction-carrying
+    # find may be negative when no positive root exists. `t` stays strictly
+    # positive via _is_physical_value; easy stays all-positive.
+    negative = [val for val in physical if val.is_negative]
+    if negative and difficulty != "easy" and find in (v, s, a):
+        return max(negative)  # smallest magnitude, exact comparison
     return None
 
 
