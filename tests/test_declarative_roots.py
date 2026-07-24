@@ -42,3 +42,66 @@ def test_no_physical_root_returns_none():
 def test_unknown_policy_name_raises():
     with pytest.raises(ValueError):
         make_root_select({"name": "nope"}, compile_constraints(SPECS, SYMS))
+
+
+SIGNED_POLICY = {
+    "name": "smallest_positive_physical",
+    "nonneg_fallback_vars": ["u", "s", "v"],
+    "signed_fallback_vars": ["v", "s", "a"],
+    "signed_fallback_difficulties": ["medium", "hard"],
+}
+
+
+def _signed_rs(policy=None):
+    return make_root_select(policy or SIGNED_POLICY,
+                            compile_constraints(SPECS, SYMS))
+
+
+def test_signed_fallback_lone_negative_v_at_medium():
+    assert _signed_rs()([sympy.Integer(-8)], v, "medium") == -8
+
+
+def test_signed_fallback_rejected_at_easy():
+    assert _signed_rs()([sympy.Integer(-8)], v, "easy") is None
+
+
+def test_signed_fallback_never_applies_to_t():
+    assert _signed_rs()([sympy.Integer(-3)], t, "medium") is None
+
+
+def test_signed_fallback_positive_still_wins():
+    assert _signed_rs()([sympy.Integer(-8), sympy.Integer(3)], v, "medium") == 3
+
+
+def test_signed_fallback_smallest_magnitude():
+    assert _signed_rs()([sympy.Integer(-8), sympy.Integer(-3)], v, "medium") == -3
+
+
+def test_signed_fallback_absent_keys_keeps_old_behavior():
+    assert _rs()([sympy.Integer(-8)], v, "medium") is None
+
+
+def test_signed_fallback_difficulties_default_medium_hard():
+    policy = {k: val for k, val in SIGNED_POLICY.items()
+              if k != "signed_fallback_difficulties"}
+    rs = _signed_rs(policy)
+    assert rs([sympy.Integer(-8)], v, "medium") == -8
+    assert rs([sympy.Integer(-8)], v, "easy") is None
+
+
+def test_signed_fallback_vars_must_be_string_list():
+    with pytest.raises(ValueError):
+        _signed_rs({**SIGNED_POLICY, "signed_fallback_vars": "v"})
+
+
+def test_signed_fallback_bad_difficulty_rejected():
+    with pytest.raises(ValueError):
+        _signed_rs({**SIGNED_POLICY,
+                    "signed_fallback_difficulties": ["extreme"]})
+
+
+def test_signed_fallback_difficulties_require_vars():
+    policy = {"name": "smallest_positive_physical",
+              "signed_fallback_difficulties": ["medium"]}
+    with pytest.raises(ValueError):
+        _signed_rs(policy)
