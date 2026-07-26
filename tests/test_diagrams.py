@@ -3,7 +3,7 @@ value/exact) is enforced in DiagramContext.label, so every topic inherits it."""
 
 import sympy
 
-from templates.diagrams import DiagramContext
+from templates.diagrams import DiagramContext, motion_1d
 from templates.suvat import SUVAT
 
 
@@ -51,3 +51,42 @@ def test_exact_form_survives_a_non_terminating_rational():
     label = ctx.label(SUVAT.symbol("u"))
     assert label["exact"] == "1/3"
     assert label["value"] == 0.333333
+
+
+def test_motion_1d_emits_kind_orientation_and_segments():
+    ctx = _ctx()
+    spec = motion_1d(ctx, segments=[{
+        "velocity_in": SUVAT.symbol("u"),
+        "acceleration": SUVAT.symbol("a"),
+        "velocity_out": SUVAT.symbol("v"),
+        "duration": SUVAT.symbol("t"),
+    }])
+    assert spec["kind"] == "motion-1d"
+    assert spec["orientation"] == "horizontal"
+    assert len(spec["segments"]) == 1
+    seg = spec["segments"][0]
+    assert seg["direction"] == "forward"
+    assert seg["velocity_in"]["exact"] == "5"
+    assert seg["velocity_out"] == {"symbol": "v", "label": "v", "role": "find"}
+
+
+def test_motion_1d_drops_roles_absent_from_the_instance():
+    """s is not in this split, so no displacement bracket is drawn."""
+    ctx = _ctx()
+    spec = motion_1d(ctx, segments=[{
+        "velocity_in": SUVAT.symbol("u"),
+        "span": SUVAT.symbol("s"),
+    }])
+    assert "span" not in spec["segments"][0]
+    assert "velocity_in" in spec["segments"][0]
+
+
+def test_motion_1d_carries_orientation_and_reverse_direction():
+    """Vertical + reversal is the upward-throw / out-and-back shape."""
+    ctx = _ctx()
+    spec = motion_1d(ctx, orientation="vertical", segments=[
+        {"velocity_in": SUVAT.symbol("u")},
+        {"direction": "reverse", "velocity_out": SUVAT.symbol("v")},
+    ])
+    assert spec["orientation"] == "vertical"
+    assert [s["direction"] for s in spec["segments"]] == ["forward", "reverse"]

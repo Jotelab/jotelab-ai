@@ -59,3 +59,26 @@ class DiagramContext:
         out["exact"] = to_exact(self.values[sym])
         out["unit"] = self.template.unit_for(sym)
         return out
+
+
+SEGMENT_ROLES = ("velocity_in", "acceleration", "velocity_out", "span", "duration")
+
+
+def motion_1d(ctx, *, orientation="horizontal", segments):
+    """A 1-D motion figure: an oriented axis plus ordered segments.
+
+    Segments are ordered because ``upward-throw`` (up then down) and
+    ``distance-displacement`` (out then back) reverse direction mid-problem;
+    a flat element bag cannot express that. Roles whose symbol is absent from
+    this instance are dropped, so the figure is variable-consistent — it draws
+    only what the problem actually involves.
+    """
+    built = []
+    for seg in segments:
+        out = {"direction": seg.get("direction", "forward")}
+        for role in SEGMENT_ROLES:
+            label = ctx.label(seg.get(role))
+            if label is not None:
+                out[role] = label
+        built.append(out)
+    return {"kind": "motion-1d", "orientation": orientation, "segments": built}
