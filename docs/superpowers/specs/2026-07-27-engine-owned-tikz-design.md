@@ -231,17 +231,78 @@ regenerated.** This is accepted deliberately: keeping the TypeScript template
 alive as a legacy path would preserve exactly the split authorship this work
 exists to remove. One author, or none.
 
-## Assumption to confirm before implementation
+## Engine transport
 
-`lib/engine/client.ts` posts to a symbolic-engine service documented as
-`jotelab-ai service/app.py` — **which does not exist in this repo.** The design
-assumes that service is deployed from outside this tree and will pick up
-`sympy_data["diagram"]` automatically, since it serializes whatever
-`build_sympy_data` returns.
+**Finding: the service exists as real, tested code — but only in unmerged git
+history, with no evidence it is actually deployed anywhere.**
 
-If instead the HTTP transport is unbuilt, that is a prerequisite task and
-materially larger than the diagram work itself. **The implementation plan must
-confirm this before starting.**
+`git log --all --oneline -- 'service/*'` finds exactly one commit:
+`5e3ea5c "Expose the engine as a FastAPI service (DEVELOPMENT_PLAN 1.1)"`
+(2026-07-05), which adds `service/app.py` (`POST /generate`, `POST /verify`,
+`GET /health`), `service/__init__.py`, a `Dockerfile`, `.env.example` entries,
+and `tests/test_service.py` (9 `TestClient` tests). Its `/generate` handler
+matches `client.ts` exactly: header `X-Engine-Api-Key`, env `ENGINE_API_KEY` —
+this is the real counterpart to the doc comment in `client.ts`, not the
+differently-shaped `api/` package described in this repo's own
+`docs/superpowers/plans/2026-07-05-fastapi-service.md` /
+`.../specs/2026-07-05-fastapi-service-design.md` (that plan uses `X-API-Key` /
+`JOTELAB_API_KEY` and a batch `/topics` + `/generate` envelope, was never
+implemented here, and should be treated as superseded/stale documentation —
+not a task to pick up).
+
+That commit lives only on `remotes/origin/epic/proposal-alignment`, whose tip
+*is* `5e3ea5c` — it has not advanced since 2026-07-05.
+`git merge-base --is-ancestor 5e3ea5c HEAD` returns false: it is **not an
+ancestor of `main`** (currently `e3bc2e1`, from 2026-07-24) or of this
+worktree's branch. No merge or revert of it appears anywhere in `main`'s
+history. Spot-checking the functions it calls —
+`engine.loop.generate(topic, given=, find=, conditions=, difficulty=, seed=)`,
+`harness.verify.verify(data, difficulty=)`, `engine.registry.load_template` /
+`topics()` — their signatures on current `main` still match what
+`service/app.py` expects, so re-merging is a low-friction cherry-pick, not a
+rewrite.
+
+No evidence of an actual running deployment was found: no `render.yaml` or
+other deploy manifest in either repo, no non-localhost `ENGINE_BASE_URL`
+anywhere. The web repo's `.env.example` has `ENGINE_BASE_URL=http://localhost:8000`
+— a local-dev default, not proof of a live instance. The Dockerfile names
+Render as the intended host (per the commit message) but that is intent, not
+deployment.
+
+**Prerequisite, out of this plan's scope:** merge/cherry-pick `5e3ea5c`'s
+`service/` package onto current `main` and actually deploy it, then point a
+real `ENGINE_BASE_URL` at it. This is bounded, already-implemented work (merge
++ redeploy), not a from-scratch FastAPI build — smaller than it would be had
+Step 1 turned up nothing, but still a precondition for Tasks 12–17 to exercise
+a live transport.
+
+### Does a new `build_sympy_data` key reach the web app automatically?
+
+**At the HTTP layer, yes, with zero transport code change.** `service/app.py`'s
+`/generate` handler calls `engine_generate(...)`, runs it through
+`verify(...)`, and does `return data` — the dict is returned as-is and FastAPI
+JSON-serializes it verbatim; only the *request* model is a typed Pydantic
+schema, `sympy_data` itself is never re-modeled. So `data["diagram"]`
+(`engine/contract.py`) would appear on the wire the moment
+`build_sympy_data` sets it — no service code to touch.
+
+**At the web's parse boundary, no — the schema must be updated, or the key is
+silently dropped.** `lib/engine/sympy-data.ts`'s `sympyDataSchema` is a plain
+Zod v4 `z.object({...})` (no `.passthrough()` / `.strict()` anywhere in the
+file) enumerating exactly `topic, seed, given, find, steps, final_answer,
+policy_applied, plausible`. Zod's default object mode strips any key not in
+the schema from the parsed result. This isn't hypothetical: `build_sympy_data`
+already conditionally adds a `"graph"` key today
+(`engine/contract.py:136-139`, when `template.graph_spec` is set), and
+`sympyDataSchema` has no `graph` field — a repo-wide grep of `lib/` and `app/`
+in the web repo turns up zero references to `.graph` or `sympy_data.graph`,
+confirming that key is already invisible past this boundary in the live app.
+
+`diagram` would meet the identical fate unless `lib/engine/sympy-data.ts`
+declares it — which is exactly what Decision 6 above already plans (add an
+optional `diagramSchema` at this trust boundary). No transport work beyond
+that schema change is required; Decision 6's plan is both necessary and
+sufficient.
 
 ## Testing
 
