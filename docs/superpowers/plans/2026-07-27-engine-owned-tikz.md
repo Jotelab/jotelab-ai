@@ -11,7 +11,12 @@
 ## Global Constraints
 
 - **Spec:** `docs/superpowers/specs/2026-07-27-engine-owned-tikz-design.md`. Read it before Task 1.
-- **Two repositories.** Tasks 1–11 are in `jotelab-ai` (this worktree). Tasks 12–17 are in `physics-jotelab` at `/home/thanakorn/Projects/Jotelab-Project/physics-jotelab/physics-jotelab`, which is a **separate git repo needing its own branch** — do not attempt to commit web changes from the engine worktree.
+- **Two repositories.** Tasks 1–11 are in `jotelab-ai` (this worktree). Tasks 12–17 are in `physics-jotelab`, which gets **its own worktree** (see the Web tasks header) — never commit web changes from the engine worktree, and never work on its `master`.
+- **Python interpreter.** This worktree has no `.venv`. Run every Python command through the main checkout's interpreter:
+  `/home/thanakorn/Projects/Jotelab-Project/jotelab-ai/jotelab-ai/.venv/bin/python -m pytest`
+  (and `… -m engine --topic X --verify`, `… -m templates.declarative`). A bare `pytest` or `python3` will fail with `ModuleNotFoundError: No module named 'sympy'`.
+- **Baseline:** 156 tests pass before Task 1, in ~2 minutes. The suite must be green at the end of every task.
+- **Task 10 is merged into Task 5.** Do not dispatch it.
 - **ADR-005 two-form numbers.** Every numeric field carries `value` (display only, `to_display`) *and* `exact` (authoritative string, `to_exact`). Never emit one without the other.
 - **Answer-hiding is by omission.** An element bound to the find symbol carries **no** `value` and **no** `exact` key. This is the load-bearing invariant; `role` tagging is presentation only.
 - **`plot-2d` is the exception.** Its polyline and axis values are always shown (they are the problem statement for graph-reading splits). Only *annotation* of the find quantity is withheld.
@@ -460,14 +465,17 @@ git commit -m "feat(engine): plot_2d and actors diagram builders"
 
 ---
 
-## Task 5: Wire the hook into `Template` and `build_sympy_data`
+## Task 5: Wire the hook into `Template` and `build_sympy_data`, and convert `motion-graphs`
 
 Replaces `graph_spec` outright. `tests/test_graph_contract.py` is rewritten, not deleted — its coverage of "hook-less topics emit no key" still matters.
+
+**`motion-graphs` converts in this same task, deliberately.** Removing `graph_spec` breaks `tests/test_motion_graphs.py`, and deferring its repair to a later task would leave the suite red across several reviews — hiding any real regression inside an expected failure. Hook removal and hook replacement belong in one commit range.
 
 **Files:**
 - Modify: `templates/base.py:55`
 - Modify: `engine/contract.py:136-139`
-- Modify: `templates/motion_graphs.py:94` (drop `graph_spec=` so the suite stays green; the real `plot-2d` hook lands in Task 10)
+- Modify: `templates/motion_graphs.py:55-95`
+- Modify: `tests/test_motion_graphs.py:14-40`
 - Delete: `tests/test_graph_contract.py`
 - Create: `tests/test_diagram_contract.py`
 
@@ -554,22 +562,75 @@ In `engine/contract.py`, replace the graph branch at the end of `build_sympy_dat
     return data
 ```
 
-In `templates/motion_graphs.py`, delete the `graph_spec=graph_spec,` line from the `Template(...)` call. Leave the `graph_spec` function and its `_point` helper in place — Task 10 reuses the exact arithmetic.
+In `templates/motion_graphs.py`, replace the `graph_spec` function (and drop its now-unused `_point` helper) with a `diagram_spec` that keeps the identical exact arithmetic:
 
-- [ ] **Step 4: Run the full suite**
+```python
+from .diagrams import plot_2d
 
-Run: `pytest tests/test_diagram_contract.py -v && pytest`
-Expected: `test_diagram_contract.py` PASSes (3 tests). The full suite has failures **only** in `tests/test_motion_graphs.py` (it asserts on the removed `graph` key) — fix those in Task 10, not here. If anything else fails, stop and investigate.
 
-- [ ] **Step 5: Commit**
+def diagram_spec(ctx):
+    """The v–t polyline ``(0, u) -> (t1, v) -> (t1+t2, v)``, exact.
+
+    ``ctx.values`` holds ``given ∪ {find}`` only, so on the acceleration-form
+    splits the cruise velocity is absent — it is derived exactly here
+    (``v = u + a*t1``, SymPy arithmetic): engine-computed, invariant-safe.
+
+    Every point ships even when the find is derivable from the figure: this
+    topic's whole purpose is graph-reading splits (slope -> a, area -> s).
+    """
+    values = ctx.values
+    uu, tt1, tt2 = values[u], values[t1], values[t2]
+    vv = values[v] if v in values else sympy.nsimplify(uu + values[a] * tt1)
+    return plot_2d(
+        ctx,
+        axes={"x": {"symbol": "t", "unit": "s"},
+              "y": {"symbol": "v", "unit": "m/s"}},
+        points=[(0, uu), (tt1, vv), (tt1 + tt2, vv)],
+    )
+```
+
+then replace `graph_spec=graph_spec,` with `diagram_spec=diagram_spec,` in the `MOTION_GRAPHS = Template(...)` call.
+
+- [ ] **Step 4: Update the motion-graphs tests**
+
+In `tests/test_motion_graphs.py`, repoint the helper and the shape assertion at the new key. **The physics assertions (area == displacement, etc.) stay exactly as they are** — only the path into the payload changes:
+
+```python
+def _exact_points(data):
+    return [(sympy.Rational(p["x"]["exact"]), sympy.Rational(p["y"]["exact"]))
+            for p in data["diagram"]["points"]]
+
+
+def test_graph_payload_shape_and_values():
+    """u=4, a=2, t1=3, t2=5: polyline (0,4) -> (3,10) -> (8,10)."""
+    data = generate("motion-graphs", given=("u", "a", "t1", "t2"), find="s",
+                    conditions={"u": 4, "a": 2, "t1": 3, "t2": 5},
+                    difficulty="easy", seed=1)
+    assert data["diagram"]["kind"] == "plot-2d"
+    assert data["diagram"]["axes"] == {"x": {"symbol": "t", "unit": "s"},
+                                       "y": {"symbol": "v", "unit": "m/s"}}
+    assert _exact_points(data) == [(0, 4), (3, 10), (8, 10)]
+    assert data["find"]["exact"] == "71"
+```
+
+Also update the module docstring's `sympy_data["graph"]` reference to `sympy_data["diagram"]`.
+
+- [ ] **Step 5: Run the full suite — it must be green**
+
+```bash
+pytest tests/test_diagram_contract.py tests/test_motion_graphs.py -v
+pytest
+python -m engine --topic motion-graphs --verify
+```
+Expected: **the entire suite passes.** Removing the old hook and installing the new one happen together precisely so there is no red window. If anything is red, do not commit.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git rm tests/test_graph_contract.py
-git add templates/base.py engine/contract.py templates/motion_graphs.py tests/test_diagram_contract.py
-git commit -m "feat(engine): diagram_spec hook replaces graph_spec"
+git add templates/base.py engine/contract.py templates/motion_graphs.py tests/test_diagram_contract.py tests/test_motion_graphs.py
+git commit -m "feat(engine): diagram_spec hook replaces graph_spec; motion-graphs emits plot-2d"
 ```
-
-**Note for the reviewer:** `pytest` is expected red on `test_motion_graphs.py` between Tasks 5 and 10. This is the one deliberate red window in the plan.
 
 ---
 
@@ -1002,91 +1063,15 @@ git commit -m "feat(engine): upward-throw and distance-displacement reversal dia
 
 ---
 
-## Task 10: `motion-graphs` → `plot-2d`, closing the red window
+## Task 10: (merged into Task 5 — do not dispatch)
 
-Reuses the existing exact point arithmetic verbatim; only the wrapper changes.
+The `motion-graphs` → `plot-2d` conversion originally lived here. It moved into
+Task 5 so that removing `graph_spec` and installing its replacement happen in one
+commit range, leaving the suite green after every task.
 
-**Files:**
-- Modify: `templates/motion_graphs.py:55-95`
-- Modify: `tests/test_motion_graphs.py:14-40`
-
-- [ ] **Step 1: Update the failing tests**
-
-In `tests/test_motion_graphs.py`, change the helper and the shape assertion to read the new key. The physics assertions (area == displacement, etc.) stay exactly as they are — only the path into the payload changes:
-
-```python
-def _exact_points(data):
-    return [(sympy.Rational(p["x"]["exact"]), sympy.Rational(p["y"]["exact"]))
-            for p in data["diagram"]["points"]]
-
-
-def test_graph_payload_shape_and_values():
-    """u=4, a=2, t1=3, t2=5: polyline (0,4) -> (3,10) -> (8,10)."""
-    data = generate("motion-graphs", given=("u", "a", "t1", "t2"), find="s",
-                    conditions={"u": 4, "a": 2, "t1": 3, "t2": 5},
-                    difficulty="easy", seed=1)
-    assert data["diagram"]["kind"] == "plot-2d"
-    assert data["diagram"]["axes"] == {"x": {"symbol": "t", "unit": "s"},
-                                       "y": {"symbol": "v", "unit": "m/s"}}
-    assert _exact_points(data) == [(0, 4), (3, 10), (8, 10)]
-    assert data["find"]["exact"] == "71"
-```
-
-Also update the module docstring's `sympy_data["graph"]` reference to `sympy_data["diagram"]`.
-
-- [ ] **Step 2: Run tests to verify they fail**
-
-Run: `pytest tests/test_motion_graphs.py -v`
-Expected: FAIL with `KeyError: 'diagram'` (the hook was removed in Task 5)
-
-- [ ] **Step 3: Write minimal implementation**
-
-In `templates/motion_graphs.py`, replace the `graph_spec` function with a `diagram_spec` that keeps the identical exact arithmetic and drops the now-unused `_point` helper:
-
-```python
-from .diagrams import plot_2d
-
-
-def diagram_spec(ctx):
-    """The v–t polyline ``(0, u) -> (t1, v) -> (t1+t2, v)``, exact.
-
-    ``ctx.values`` holds ``given ∪ {find}`` only, so on the acceleration-form
-    splits the cruise velocity is absent — it is derived exactly here
-    (``v = u + a*t1``, SymPy arithmetic): engine-computed, invariant-safe.
-
-    Every point ships even when the find is derivable from the figure: this
-    topic's whole purpose is graph-reading splits (slope -> a, area -> s).
-    """
-    values = ctx.values
-    uu, tt1, tt2 = values[u], values[t1], values[t2]
-    vv = values[v] if v in values else sympy.nsimplify(uu + values[a] * tt1)
-    return plot_2d(
-        ctx,
-        axes={"x": {"symbol": "t", "unit": "s"},
-              "y": {"symbol": "v", "unit": "m/s"}},
-        points=[(0, uu), (tt1, vv), (tt1 + tt2, vv)],
-    )
-```
-
-then pass `diagram_spec=diagram_spec,` in `MOTION_GRAPHS = Template(...)`.
-
-- [ ] **Step 4: Run the full suite — the red window closes here**
-
-```bash
-pytest tests/test_motion_graphs.py -v
-pytest
-python -m engine --topic motion-graphs --verify
-```
-Expected: **the entire suite is green.** If not, do not proceed to Task 11.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add templates/motion_graphs.py tests/test_motion_graphs.py
-git commit -m "feat(engine): motion-graphs emits a plot-2d diagram spec"
-```
-
----
+The task number is retained rather than renumbering Tasks 11–17, so brief
+extraction (`scripts/task-brief PLAN_FILE N`) keeps matching the numbers used in
+the ledger. **Skip this task.**
 
 ## Task 11: Cross-topic invariant sweep + engine docs
 
@@ -1223,8 +1208,13 @@ git commit -m "test(engine): cross-topic answer-hiding sweep; correct LLM-owns-T
 
 > **Stop.** Tasks 12–17 are in a **different git repository**:
 > `/home/thanakorn/Projects/Jotelab-Project/physics-jotelab/physics-jotelab`.
-> Create a branch there first (`git checkout -b feat/engine-owned-diagrams`).
-> Do not commit these from the engine worktree.
+> That checkout sits on `master` and is the human's working copy — **do not
+> implement there.** The controller creates an isolated worktree for the web
+> work and dispatches these tasks inside it; if you find yourself on `master`,
+> stop and report BLOCKED.
+>
+> Node commands run normally there (`npm test`, `npm run lint`, `npx tsc
+> --noEmit`) — the `.venv` constraint above applies only to the engine repo.
 
 ---
 
