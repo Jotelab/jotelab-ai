@@ -133,8 +133,15 @@ def build_sympy_data(template, given, find, inputs, value, sym_expr, seed, polic
         "policy_applied": policy.label,
         "plausible": bool(plausible),
     }
-    if template.graph_spec is not None:
+    if template.diagram_spec is not None:
+        # Imported here, not at module scope: templates.diagrams imports
+        # to_display/to_exact from this module, so a top-level import would
+        # close an import cycle. Same deferral rationale as
+        # registry._ensure_declarative_loaded.
+        from templates.diagrams import DiagramContext
+
         values = dict(inputs)
         values[find] = value
-        data["graph"] = template.graph_spec(values)
+        ctx = DiagramContext(template, values, given=set(given), find=find)
+        data["diagram"] = template.diagram_spec(ctx)
     return data

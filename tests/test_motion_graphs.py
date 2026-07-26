@@ -1,5 +1,5 @@
 """Graph-reading questions over the two-phase scenario: the engine emits the
-piecewise v–t polyline (exact values) in sympy_data["graph"]; rendering is the
+piecewise v–t polyline (exact values) in sympy_data["diagram"]; rendering is the
 web/TikZ track's job. Slope of phase 1 is a, area under the polyline is s."""
 
 import sympy
@@ -13,7 +13,7 @@ from templates.motion_graphs import MOTION_GRAPHS as TPL
 
 def _exact_points(data):
     return [(sympy.Rational(p["x"]["exact"]), sympy.Rational(p["y"]["exact"]))
-            for p in data["graph"]["points"]]
+            for p in data["diagram"]["points"]]
 
 
 def test_graph_payload_shape_and_values():
@@ -21,9 +21,9 @@ def test_graph_payload_shape_and_values():
     data = generate("motion-graphs", given=("u", "a", "t1", "t2"), find="s",
                     conditions={"u": 4, "a": 2, "t1": 3, "t2": 5},
                     difficulty="easy", seed=1)
-    assert data["graph"]["kind"] == "v-t"
-    assert data["graph"]["axes"] == {"x": {"symbol": "t", "unit": "s"},
-                                     "y": {"symbol": "v", "unit": "m/s"}}
+    assert data["diagram"]["kind"] == "plot-2d"
+    assert data["diagram"]["axes"] == {"x": {"symbol": "t", "unit": "s"},
+                                       "y": {"symbol": "v", "unit": "m/s"}}
     assert _exact_points(data) == [(0, 4), (3, 10), (8, 10)]
     assert data["find"]["exact"] == "71"
 
@@ -67,13 +67,13 @@ def test_all_splits_verify_and_carry_the_graph():
                 data = generate("motion-graphs", given=given, find=find,
                                 difficulty=band, seed=seed)
                 assert verify_generic(data, TPL, difficulty=band) is True
-                assert len(data["graph"]["points"]) == 3
+                assert len(data["diagram"]["points"]) == 3
 
 
 def test_display_values_match_exact():
     from engine.contract import exact, to_display
     data = generate("motion-graphs", difficulty="medium", seed=7)
-    for p in data["graph"]["points"]:
+    for p in data["diagram"]["points"]:
         for axis in ("x", "y"):
             assert to_display(exact(p[axis]["exact"])) == p[axis]["value"]
 

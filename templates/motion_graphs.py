@@ -4,7 +4,7 @@ Same physics as ``multi-stage-motion`` (imported, not duplicated); registered
 as its own topic so the web app phrases questions *from the graph*: the slope
 of phase 1 is the acceleration, the area under the polyline is the total
 displacement. The engine emits the graph's polyline — exact values, ADR-005
-style — in ``sympy_data["graph"]`` via the ``graph_spec`` hook; rendering
+style — in ``sympy_data["diagram"]`` via the ``diagram_spec`` hook; rendering
 belongs to the web/TikZ track.
 
 The whitelist is narrower than multi-stage's for two reasons: a drawable graph
@@ -20,8 +20,6 @@ acceleration form.
 from __future__ import annotations
 
 import sympy
-
-from engine.contract import to_display, to_exact
 
 from .base import Template, real_candidates, signed_smallest
 from .multi_stage import (CONSTRAINTS, E_S_A, E_S_V, EQUATIONS, SYMBOLS,
@@ -57,27 +55,29 @@ def root_select(values, find, difficulty):
     return _multi_stage_root_select(values, find, difficulty)
 
 
-# -- the graph payload ---------------------------------------------------------
-def _point(x, y):
-    return {"x": {"value": to_display(x), "exact": to_exact(x)},
-            "y": {"value": to_display(y), "exact": to_exact(y)}}
+# -- the diagram payload --------------------------------------------------------
+from .diagrams import plot_2d
 
 
-def graph_spec(values):
+def diagram_spec(ctx):
     """The v–t polyline ``(0, u) -> (t1, v) -> (t1+t2, v)``, exact.
 
-    ``values`` holds ``given ∪ {find}`` only, so on the acceleration-form
+    ``ctx.values`` holds ``given ∪ {find}`` only, so on the acceleration-form
     splits the cruise velocity is absent — it is derived exactly here
     (``v = u + a*t1``, SymPy arithmetic): engine-computed, invariant-safe.
+
+    Every point ships even when the find is derivable from the figure: this
+    topic's whole purpose is graph-reading splits (slope -> a, area -> s).
     """
+    values = ctx.values
     uu, tt1, tt2 = values[u], values[t1], values[t2]
     vv = values[v] if v in values else sympy.nsimplify(uu + values[a] * tt1)
-    return {
-        "kind": "v-t",
-        "axes": {"x": {"symbol": "t", "unit": "s"},
-                 "y": {"symbol": "v", "unit": "m/s"}},
-        "points": [_point(0, uu), _point(tt1, vv), _point(tt1 + tt2, vv)],
-    }
+    return plot_2d(
+        ctx,
+        axes={"x": {"symbol": "t", "unit": "s"},
+              "y": {"symbol": "v", "unit": "m/s"}},
+        points=[(0, uu), (tt1, vv), (tt1 + tt2, vv)],
+    )
 
 
 # -- the template object -------------------------------------------------------
@@ -91,5 +91,5 @@ MOTION_GRAPHS = Template(
     root_select=root_select,
     default_split=((u, a, t1, t2), s),
     signed_answer=True,  # the slope find (a) is negative on deceleration graphs
-    graph_spec=graph_spec,
+    diagram_spec=diagram_spec,
 )
