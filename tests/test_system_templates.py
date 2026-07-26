@@ -147,13 +147,13 @@ def test_parse_rejects_empty_aux_block():
 
 
 def test_parse_rejects_aux_in_default_split():
-    with pytest.raises(TemplateValidationError):
+    with pytest.raises(TemplateValidationError, match="auxiliary"):
         parse_template(_toy_doc(
             default_split={"given": ["d", "p"], "find": "t"}))
 
 
 def test_parse_rejects_aux_in_golden_given():
-    with pytest.raises(TemplateValidationError):
+    with pytest.raises(TemplateValidationError, match="auxiliary"):
         parse_template(_toy_doc(
             golden_cases=[{"given": {"d": 12, "p": 12}, "find": "t",
                            "difficulty": "easy", "expected": "4"}]))

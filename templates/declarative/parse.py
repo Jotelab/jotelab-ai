@@ -189,11 +189,6 @@ def parse_template(doc) -> Template:
 
     if "given" not in split or "find" not in split:
         _fail("default_split needs 'given' and 'find'")
-    try:
-        given = tuple(symbols[n] for n in split["given"])
-        find = symbols[split["find"]]
-    except KeyError as exc:
-        _fail(f"default_split references undeclared variable {exc}")
 
     if aux_symbols:
         banned = set(aux_symbols)
@@ -203,6 +198,12 @@ def parse_template(doc) -> Template:
         for i, case in enumerate(doc.get("golden_cases", [])):
             if set(case.get("given", {})) & banned:
                 _fail(f"golden case {i} pins an auxiliary variable")
+
+    try:
+        given = tuple(symbols[n] for n in split["given"])
+        find = symbols[split["find"]]
+    except KeyError as exc:
+        _fail(f"default_split references undeclared variable {exc}")
 
     if aux_symbols:
         solvability = make_system_solvability(
