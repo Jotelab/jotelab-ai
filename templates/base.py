@@ -53,6 +53,7 @@ class Template:
     default_split: tuple  # (given_symbols, find_symbol) for Basic mode
     signed_answer: bool = False  # vector/direction topics: allow a negative answer
     graph_spec: Callable = None  # optional: values -> JSON-able graph payload ("graph" key)
+    auxiliaries: dict = None  # system templates: Symbol -> unit str (spec 2026-07-27)
 
     # -- convenience accessors -------------------------------------------------
 
@@ -66,6 +67,8 @@ class Template:
         return self.variables[sym].ranges[difficulty]
 
     def unit_for(self, sym):
+        if self.auxiliaries and sym in self.auxiliaries:
+            return self.auxiliaries[sym]
         return self.variables[sym].unit
 
     def valid_splits(self):
