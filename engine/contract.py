@@ -104,7 +104,7 @@ def build_step(find, sym_expr, inputs, value, unit):
 
 
 def build_sympy_data(template, given, find, inputs, value, sym_expr, seed, policy,
-                     plausible):
+                     plausible, aux_values=None):
     """Assemble the locked ``sympy_data`` dict (spec §7)."""
     given_out = [
         {
@@ -133,6 +133,18 @@ def build_sympy_data(template, given, find, inputs, value, sym_expr, seed, polic
         "policy_applied": policy.label,
         "plausible": bool(plausible),
     }
+    if aux_values:
+        # System templates (spec 2026-07-27): the internal unknowns of the
+        # solved branch, exact-first like every other number (ADR-005).
+        data["auxiliary"] = [
+            {
+                "symbol": sym.name,
+                "value": to_display(val),
+                "exact": to_exact(val),
+                "unit": template.unit_for(sym),
+            }
+            for sym, val in sorted(aux_values.items(), key=lambda kv: kv[0].name)
+        ]
     if template.graph_spec is not None:
         values = dict(inputs)
         values[find] = value

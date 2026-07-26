@@ -163,3 +163,37 @@ def test_parse_equations_may_reference_aux():
     # covered by test_parse_toy_system_doc; here: undeclared names still rejected
     with pytest.raises(TemplateValidationError):
         parse_template(_toy_doc(equations=["Eq(q, w*t)", "Eq(q, d)"]))
+
+
+from engine import contract as contract_mod
+
+
+def test_contract_emits_sorted_auxiliary_array():
+    tpl = parse_template(_toy_doc())
+    d_sym, w_sym, t_sym = (tpl.symbol(n) for n in ("d", "w", "t"))
+    p_sym = next(iter(tpl.auxiliaries))
+    ok, info = tpl.solvability((d_sym, w_sym), t_sym)
+    branch = info.branches[0]
+    inputs = {d_sym: sympy.Integer(12), w_sym: sympy.Integer(3)}
+    data = contract_mod.build_sympy_data(
+        tpl, (d_sym, w_sym), t_sym, inputs, sympy.Integer(4),
+        branch.find_expr, seed=0,
+        policy=type("P", (), {"label": "easy"})(), plausible=True,
+        aux_values={p_sym: sympy.Integer(12)},
+    )
+    assert data["auxiliary"] == [
+        {"symbol": "p", "value": 12, "exact": "12", "unit": "m"}
+    ]
+
+
+def test_contract_without_aux_values_has_no_key():
+    tpl = parse_template(_toy_doc())
+    d_sym, w_sym, t_sym = (tpl.symbol(n) for n in ("d", "w", "t"))
+    ok, info = tpl.solvability((d_sym, w_sym), t_sym)
+    data = contract_mod.build_sympy_data(
+        tpl, (d_sym, w_sym), t_sym,
+        {d_sym: sympy.Integer(12), w_sym: sympy.Integer(3)},
+        sympy.Integer(4), info.branches[0].find_expr, seed=0,
+        policy=type("P", (), {"label": "easy"})(), plausible=True,
+    )
+    assert "auxiliary" not in data
