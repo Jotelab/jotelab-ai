@@ -1,9 +1,11 @@
 """System templates (spec 2026-07-27): branch derivation, parsing, loop, contract."""
 
+import copy
 import pytest
 import sympy
 
 from engine.errors import TemplateValidationError
+from harness.verify import FidelityError
 from templates.base import Template, VarSpec
 from templates.declarative import parse_template
 from templates.declarative.system import (Branch, SystemSolution,
@@ -259,3 +261,52 @@ def test_rational_auxiliary_generates():
                         difficulty="easy", seed=1)
     assert data["find"]["exact"] == "4"
     assert data["auxiliary"][0]["exact"] in ("2", "-2")
+
+
+from harness.verify import verify_generic
+
+
+def _toy_instance():
+    tpl = parse_template(_toy_doc())
+    with registry.temporary(tpl):
+        data = generate("toy-meet", given=["d", "w"], find="t",
+                        conditions={"d": 12, "w": 3}, difficulty="easy", seed=1)
+    return tpl, data
+
+
+def test_verify_system_instance_passes():
+    tpl, data = _toy_instance()
+    assert verify_generic(data, tpl, difficulty="easy") is True
+
+
+def test_verify_catches_corrupted_auxiliary():
+    tpl, data = _toy_instance()
+    bad = copy.deepcopy(data)
+    bad["auxiliary"][0]["exact"] = "99"
+    bad["auxiliary"][0]["value"] = 99
+    with pytest.raises(FidelityError, match=r"\(a\)"):
+        verify_generic(bad, tpl, difficulty="easy")
+
+
+def test_verify_catches_missing_auxiliary():
+    tpl, data = _toy_instance()
+    bad = copy.deepcopy(data)
+    del bad["auxiliary"]
+    with pytest.raises(FidelityError, match=r"\(a\)"):
+        verify_generic(bad, tpl, difficulty="easy")
+
+
+def test_verify_catches_aux_display_drift():
+    tpl, data = _toy_instance()
+    bad = copy.deepcopy(data)
+    bad["auxiliary"][0]["value"] = 13  # exact stays "12"
+    with pytest.raises(FidelityError, match=r"\(e\)"):
+        verify_generic(bad, tpl, difficulty="easy")
+
+
+def test_verify_catches_aux_unit_mismatch():
+    tpl, data = _toy_instance()
+    bad = copy.deepcopy(data)
+    bad["auxiliary"][0]["unit"] = "s"
+    with pytest.raises(FidelityError, match=r"\(c\)"):
+        verify_generic(bad, tpl, difficulty="easy")

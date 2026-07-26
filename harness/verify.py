@@ -66,8 +66,16 @@ def verify_generic(sympy_data, template, difficulty="easy"):
     values = dict(given)
     values[find_sym] = find_val
 
-    _assert_equation_holds(template, all_syms, given, find_sym, values)              # (a)
-    _assert_independent_recompute(template, given, find_sym, find_val, difficulty)   # (b)
+    if template.auxiliaries:
+        aux_vals = _emitted_auxiliaries(template, sympy_data)
+        values.update(aux_vals)
+        _assert_system_holds(template, values)                                     # (a)
+        _assert_system_recompute(template, given, find_sym, find_val,
+                                 aux_vals, difficulty)                             # (b)
+    else:
+        _assert_equation_holds(template, all_syms, given, find_sym, values)        # (a)
+        _assert_independent_recompute(template, given, find_sym, find_val,
+                                      difficulty)                                  # (b)
     _assert_units_consistent(template, sympy_data)                                  # (c)
     _assert_plausible(template, values, difficulty)                                 # (d)
     _assert_display_consistent(sympy_data)                                          # (e)
@@ -125,6 +133,59 @@ def _assert_independent_recompute(template, given, find_sym, find_val, difficult
         )
 
 
+def _emitted_auxiliaries(template, sympy_data):
+    """Parse and complete-check the emitted auxiliary values (system templates)."""
+    by_name = {sym.name: sym for sym in template.auxiliaries}
+    seen = {}
+    for item in sympy_data.get("auxiliary", []):
+        sym = by_name.get(item["symbol"])
+        if sym is None:
+            raise FidelityError(f"(a) unknown auxiliary {item['symbol']!r}")
+        seen[sym] = exact(item["exact"])
+    missing = sorted(s.name for s in set(by_name.values()) - set(seen))
+    if missing:
+        raise FidelityError(f"(a) auxiliary values missing for {', '.join(missing)}")
+    return seen
+
+
+def _assert_system_holds(template, values):
+    """(a, system form) every declared equation holds at the emitted values."""
+    for eq in template.equations:
+        residual = sympy.simplify(eq.lhs.subs(values) - eq.rhs.subs(values))
+        if residual != 0:
+            raise FidelityError(
+                f"(a) equation {eq} does not hold; residual={residual}")
+
+
+def _assert_system_recompute(template, given, find_sym, find_val, aux_vals,
+                             difficulty):
+    """(b, system form) independent numeric whole-system solve, same branch."""
+    aux_syms = sorted(template.auxiliaries, key=lambda s: s.name)
+    eqs = [sympy.Eq(e.lhs.subs(given), e.rhs.subs(given))
+           for e in template.equations]
+    sols = sympy.solve(eqs, [find_sym] + aux_syms, dict=True)
+    candidates = []
+    for sol in sols:
+        if find_sym in sol:
+            val = sympy.nsimplify(sol[find_sym])
+            if val.is_real and val.is_number:
+                candidates.append((val, sol))
+    chosen = template.root_select([c[0] for c in candidates], find_sym, difficulty)
+    if chosen is None:
+        raise FidelityError(f"(b) independent solve found no physical {find_sym}")
+    if sympy.simplify(chosen - find_val) != 0:
+        raise FidelityError(
+            f"(b) final_answer {find_val} != independent recompute {chosen}")
+    branch = next(sol for val, sol in candidates
+                  if sympy.simplify(val - chosen) == 0)
+    for sym in aux_syms:
+        recomputed = sympy.nsimplify(branch[sym])
+        if sympy.simplify(recomputed - aux_vals[sym]) != 0:
+            raise FidelityError(
+                f"(b) auxiliary {sym} {aux_vals[sym]} != independent "
+                f"recompute {recomputed}")
+
+
 def _assert_units_consistent(template, sympy_data):
     """(c) Every emitted unit matches the canonical unit for its symbol."""
     canonical = {sym.name: template.variables[sym].unit for sym in template.variables}
@@ -139,6 +200,12 @@ def _assert_units_consistent(template, sympy_data):
         raise FidelityError(f"(c) unit mismatch for find {find['symbol']}")
     if sympy_data["final_answer"]["unit"] != find["unit"]:
         raise FidelityError("(c) final_answer unit != find unit")
+    aux_canonical = {sym.name: unit
+                     for sym, unit in (template.auxiliaries or {}).items()}
+    for item in sympy_data.get("auxiliary", []):
+        if item["unit"] != aux_canonical.get(item["symbol"]):
+            raise FidelityError(
+                f"(c) unit mismatch for auxiliary {item['symbol']}")
 
 
 def _assert_plausible(template, values, difficulty):
@@ -157,10 +224,8 @@ def _assert_display_consistent(sympy_data):
     ``final_answer`` and ``find`` — the display number must be exactly the
     :func:`~engine.contract.to_display` of the exact value it claims to show.
     """
-    items = list(sympy_data["given"]) + [
-        sympy_data["find"],
-        sympy_data["final_answer"],
-    ]
+    items = (list(sympy_data["given"]) + list(sympy_data.get("auxiliary", []))
+             + [sympy_data["find"], sympy_data["final_answer"]])
     for it in items:
         if to_display(exact(it["exact"])) != it["value"]:
             raise FidelityError(
