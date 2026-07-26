@@ -109,7 +109,9 @@ def _replay_golden(template, cases):
     if not cases:
         return "no golden cases supplied (stage 4 requires >= 1)"
     for i, case in enumerate(cases):
-        conditions = {k: int(v) for k, v in case["given"].items()}
+        # exact() accepts ints and exact strings like "7/2", and fails closed
+        # on anything non-rational (ADR-005) — int() broke fractional goldens.
+        conditions = {k: exact(v) for k, v in case["given"].items()}
         given = tuple(case["given"].keys())
         difficulty = case.get("difficulty", "easy")
         try:

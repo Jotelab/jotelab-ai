@@ -58,6 +58,8 @@ def _subs_dims(expr, sym_dim):
 def check_homogeneous(template):
     """Raise ``TemplateValidationError(2, ...)`` if any equation is inhomogeneous."""
     sym_dim = {sym: dimension_of(spec.unit) for sym, spec in template.variables.items()}
+    for sym, unit in (template.auxiliaries or {}).items():
+        sym_dim[sym] = dimension_of(unit)
 
     for eq in template.equations:
         lhs = _subs_dims(eq.lhs, sym_dim)

@@ -310,3 +310,26 @@ def test_verify_catches_aux_unit_mismatch():
     bad["auxiliary"][0]["unit"] = "s"
     with pytest.raises(FidelityError, match=r"\(c\)"):
         verify_generic(bad, tpl, difficulty="easy")
+
+
+from engine.errors import TemplateValidationError as TVE
+from templates.declarative.gate import validate_template
+from templates.declarative.units import check_homogeneous
+
+
+def test_gate_accepts_fractional_golden_given():
+    doc = _toy_doc(golden_cases=[
+        {"given": {"d": 12, "w": 3}, "find": "t", "difficulty": "easy",
+         "expected": "4"},
+        {"given": {"d": "7/2", "w": 1}, "find": "t", "difficulty": "easy",
+         "expected": "7/2"},
+    ])
+    report = validate_template(doc, n_smoke=2)
+    assert report.passed, [(s.number, s.reason) for s in report.stages]
+
+
+def test_dimensional_stage_covers_auxiliary_units():
+    doc = _toy_doc(auxiliary={"p": {"unit": "s"}})  # wrong: p should be m
+    tpl = parse_template(doc)
+    with pytest.raises(TVE):
+        check_homogeneous(tpl)
