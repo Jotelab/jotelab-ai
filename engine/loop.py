@@ -122,6 +122,18 @@ def _solve_system(branches, find, inputs, template, difficulty):
     the auxiliaries are then evaluated from the SAME branch as the chosen
     value (spec 2026-07-27) and must all be exact rationals — anything else
     is a failed roll (ADR-005 keeps the exact() parser Rational-only).
+
+    Tied roots: two or more branches can yield the same chosen find value
+    (e.g. ``Eq(q**2, c), Eq(t, c)`` -> t=c with q=±sqrt(c)). Every branch
+    whose find value matches ``chosen`` is tried in turn; a branch that is
+    not viable (irrational auxiliary, or a ``.subs`` failure) is skipped in
+    favor of the next tied branch, and only the exhaustion of every matching
+    branch counts as a failed roll. Known limitation: this only widens the
+    *find/auxiliary* selection — a per-branch LOOP constraint is still
+    checked post-selection in ``_satisfies``, so a template combining tied
+    roots with an auxiliary constraint can still re-roll on a branch that
+    would have passed had a different (also-tied) branch been returned
+    instead; revisit in the scene layer if that combination is needed.
     """
     candidates = []  # (value, branch)
     for branch in branches:
@@ -140,14 +152,19 @@ def _solve_system(branches, find, inputs, template, difficulty):
         if sympy.simplify(val - chosen) != 0:
             continue
         aux_values = {}
+        viable = True
         for aux_sym, expr in branch.aux_exprs.items():
             try:
                 aval = sympy.nsimplify(expr.subs(inputs))
             except (ZeroDivisionError, ValueError):
-                return None
+                viable = False
+                break
             if not (aval.is_number and aval.is_rational):
-                return None  # non-rational auxiliary -> re-roll
+                viable = False  # non-rational auxiliary -> try next tied branch
+                break
             aux_values[aux_sym] = aval
+        if not viable:
+            continue
         return chosen, branch.find_expr, aux_values
     return None
 

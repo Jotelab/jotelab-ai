@@ -159,11 +159,21 @@ def _assert_system_holds(template, values):
 
 def _assert_system_recompute(template, given, find_sym, find_val, aux_vals,
                              difficulty):
-    """(b, system form) independent numeric whole-system solve, same branch."""
+    """(b, system form) independent numeric whole-system solve, same branch.
+
+    Branch selection matches on the *find* value AND every emitted auxiliary
+    (not find alone) — with tied find roots (spec F1: e.g. ``q**2 = c``), a
+    branch whose find value happens to match ``chosen`` but whose auxiliary
+    disagrees with what the generator emitted is not the branch the emitted
+    instance actually came from, and must not be accepted as a fidelity match.
+    """
     aux_syms = sorted(template.auxiliaries, key=lambda s: s.name)
     eqs = [sympy.Eq(e.lhs.subs(given), e.rhs.subs(given))
            for e in template.equations]
-    sols = sympy.solve(eqs, [find_sym] + aux_syms, dict=True)
+    try:
+        sols = sympy.solve(eqs, [find_sym] + aux_syms, dict=True)
+    except (NotImplementedError, TypeError) as exc:
+        raise FidelityError(f"(b) independent system solve failed: {exc}")
     candidates = []
     for sol in sols:
         if find_sym in sol:
@@ -176,14 +186,17 @@ def _assert_system_recompute(template, given, find_sym, find_val, aux_vals,
     if sympy.simplify(chosen - find_val) != 0:
         raise FidelityError(
             f"(b) final_answer {find_val} != independent recompute {chosen}")
-    branch = next(sol for val, sol in candidates
-                  if sympy.simplify(val - chosen) == 0)
-    for sym in aux_syms:
-        recomputed = sympy.nsimplify(branch[sym])
-        if sympy.simplify(recomputed - aux_vals[sym]) != 0:
-            raise FidelityError(
-                f"(b) auxiliary {sym} {aux_vals[sym]} != independent "
-                f"recompute {recomputed}")
+    branch = None
+    for val, sol in candidates:
+        if sympy.simplify(val - chosen) != 0:
+            continue
+        if all(sym in sol and sympy.simplify(sympy.nsimplify(sol[sym]) - aux_vals[sym]) == 0
+               for sym in aux_syms):
+            branch = sol
+            break
+    if branch is None:
+        raise FidelityError(
+            "(b) no independent solution branch matches the emitted auxiliaries")
 
 
 def _assert_units_consistent(template, sympy_data):

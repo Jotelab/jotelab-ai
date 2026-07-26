@@ -333,3 +333,61 @@ def test_dimensional_stage_covers_auxiliary_units():
     tpl = parse_template(doc)
     with pytest.raises(TVE):
         check_homogeneous(tpl)
+
+
+# -- F1: tied find roots exhaust every matching branch (final review) ---------
+
+TIED_DOC = {
+    "topic": "toy-tied",
+    "variables": {
+        "c": {"unit": "1", "ranges": {"easy": [4, 4, False], "medium": [4, 4, False], "hard": [4, 4, False]}},
+        "t": {"unit": "1", "ranges": {"easy": [1, 10, False], "medium": [1, 10, False], "hard": [1, 10, False]}},
+    },
+    "auxiliary": {"q": {"unit": "1"}},
+    "equations": ["Eq(q**2, c)", "Eq(t, c)"],
+    "root_policy": {"name": "smallest_positive_physical"},
+    "constraints": [],
+    "default_split": {"given": ["c"], "find": "t"},
+    "golden_cases": [{"given": {"c": 4}, "find": "t", "difficulty": "easy",
+                      "expected": "4"}],
+    "trust_state": "unverified",
+}
+
+
+def test_tied_branches_rational_aux_generates():
+    # c = 4 -> t = 4 with q = ±2, both rational; previously succeeded via the
+    # first matching branch, still must succeed after the exhaustion fix.
+    tpl = parse_template(TIED_DOC)
+    with registry.temporary(tpl):
+        data = generate("toy-tied", given=["c"], find="t",
+                        conditions={"c": 4}, difficulty="easy", seed=1)
+    assert data["find"]["exact"] == "4"
+
+
+def test_tied_branches_all_irrational_exhausted():
+    # c = 2 -> t = 2 with q = ±sqrt(2); both tied branches are irrational, so
+    # every matching branch must be tried and exhausted before re-rolling,
+    # eventually raising NoCleanInstanceError (not an early return None).
+    tpl = parse_template(TIED_DOC)
+    with registry.temporary(tpl):
+        with pytest.raises(NoCleanInstanceError):
+            generate("toy-tied", given=["c"], find="t",
+                     conditions={"c": 2}, difficulty="easy", seed=1,
+                     max_attempts=10)
+
+
+# -- F2: harness branch selection must match emitted auxiliaries -------------
+
+from harness.verify import _assert_system_recompute
+
+
+def test_harness_recompute_rejects_branch_with_wrong_auxiliary():
+    tpl = parse_template(_toy_doc())
+    d_sym, w_sym, t_sym = (tpl.symbol(n) for n in ("d", "w", "t"))
+    p_sym = next(iter(tpl.auxiliaries))
+    given = {d_sym: sympy.Integer(12), w_sym: sympy.Integer(3)}
+    with pytest.raises(FidelityError, match="matches the emitted auxiliaries"):
+        _assert_system_recompute(
+            tpl, given, t_sym, sympy.Integer(4),
+            {p_sym: sympy.Integer(99)}, "easy",
+        )

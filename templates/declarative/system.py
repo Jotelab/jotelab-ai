@@ -51,7 +51,7 @@ def derive_branches(equations, given, find, aux_syms):
     unknowns = [find] + sorted(aux_syms, key=lambda s: s.name)
     try:
         sols = sympy.solve(equations, unknowns, dict=True)
-    except (NotImplementedError, ValueError):
+    except (NotImplementedError, ValueError, TypeError):
         return ()
     branches = []
     for sol in sols:

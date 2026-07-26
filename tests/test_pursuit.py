@@ -3,7 +3,6 @@
 import json
 from pathlib import Path
 
-import pytest
 import sympy
 
 from engine.loop import generate

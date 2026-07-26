@@ -12,6 +12,7 @@ Fidelity check depend on, so it is fixed here::
       "steps": [{"expr_latex": ..., "substituted_latex": ..., "result_latex": ...}],
       "final_answer": {"value": 10, "exact": "10", "unit": "m/s",
                        "latex": "10\\ \\text{m/s}"},
+      "auxiliary": [{"symbol": "x", "value": 10.5, "exact": "21/2", "unit": "m"}],   # system templates only
       "policy_applied": "easy",
       "plausible": true
     }
