@@ -1,0 +1,25 @@
+{
+  "topic": "two-car-meet",
+  "variables": {
+    "gap": {"unit": "m",     "ranges": {"easy": [0, 10, false], "medium": [0, 30, false], "hard": [0, 60, false]}},
+    "va":  {"unit": "m/s",   "ranges": {"easy": [6, 20, false], "medium": [6, 30, false], "hard": [6, 40, false]}},
+    "vb":  {"unit": "m/s",   "ranges": {"easy": [1, 5, false],  "medium": [1, 10, false], "hard": [1, 15, false]}},
+    "ab":  {"unit": "m/s^2", "ranges": {"easy": [1, 4, false],  "medium": [1, 6, false],  "hard": [1, 8, false]}},
+    "t":   {"unit": "s",     "ranges": {"easy": [1, 10, false], "medium": [1, 20, false], "hard": [1, 30, false]}}
+  },
+  "auxiliary": {"x": {"unit": "m"}},
+  "equations": [
+    "Eq(x, va*t)",
+    "Eq(x, gap + vb*t + ab*t**2/2)"
+  ],
+  "root_policy": {"name": "smallest_positive_physical"},
+  "constraints": [
+    {"var": "t", "op": ">", "value": 0},
+    {"var": "x", "op": ">", "value": 0}
+  ],
+  "default_split": {"given": ["gap", "va", "vb", "ab"], "find": "t"},
+  "golden_cases": [
+    {"given": {"gap": 0, "va": 20, "vb": 10, "ab": 4}, "find": "t", "difficulty": "easy", "expected": "5"}
+  ],
+  "trust_state": "unverified"
+}

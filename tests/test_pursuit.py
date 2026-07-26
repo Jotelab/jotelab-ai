@@ -55,3 +55,11 @@ def test_pursuit_passes_the_gate():
     doc = json.loads(PURSUIT_JSON.read_text())
     report = validate_template(doc, n_smoke=3)
     assert report.passed, [(s.number, s.passed, s.reason) for s in report.stages]
+
+
+def test_two_car_fixture_passes_gate_but_is_not_registered():
+    fixture = Path(__file__).resolve().parent / "fixtures" / "two_car_meet.json"
+    doc = json.loads(fixture.read_text())
+    report = validate_template(doc, n_smoke=2)
+    assert report.passed, [(s.number, s.passed, s.reason) for s in report.stages]
+    assert "two-car-meet" not in topics()
