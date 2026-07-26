@@ -47,10 +47,11 @@ def test_solve_worked_example_exact():
     tpl = load_template("suvat")
     eq = EQUATION_BY_EXCLUDED[s]  # E1
     inputs = {u: sympy.Integer(0), a: sympy.Integer(2), t: sympy.Integer(5)}
-    value, sym_expr = _solve(eq, v, inputs, tpl, "easy")
+    value, sym_expr, aux_values = _solve(eq, v, inputs, tpl, "easy")
     assert value == 10
     assert value.is_Integer
     assert sympy.simplify(sym_expr - (u + a * t)) == 0
+    assert aux_values == {}  # single-equation path emits empty dict
 
 
 def test_worked_example_sympy_data_shape():
@@ -93,5 +94,6 @@ def test_root_selection_smallest_positive():
     tpl = load_template("suvat")
     eq = EQUATION_BY_EXCLUDED[v]  # E2, excludes v -> solvable for t given {u,a,s}
     inputs = {u: sympy.Integer(0), a: sympy.Integer(2), s: sympy.Integer(9)}
-    value, _ = _solve(eq, t, inputs, tpl, "easy")
+    value, _, aux_values = _solve(eq, t, inputs, tpl, "easy")
     assert value == 3
+    assert aux_values == {}  # single-equation path emits empty dict
