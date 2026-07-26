@@ -82,3 +82,39 @@ def motion_1d(ctx, *, orientation="horizontal", segments):
                 out[role] = label
         built.append(out)
     return {"kind": "motion-1d", "orientation": orientation, "segments": built}
+
+
+def plot_2d(ctx, *, axes, points):
+    """A 2-D plot: labelled axes and a polyline.
+
+    **The exception to the answer-hiding rule.** ``motion-graphs`` exists to
+    produce graph-reading splits, where the student derives the slope (``a``) or
+    the area under the polyline (``s``) *from the figure*. Withholding the
+    polyline because the find is derivable from it would delete the question. So
+    every point ships; what never ships is an *annotation* naming the find's
+    value (no ``$a = 2$`` slope caption, no labelled shaded area).
+    """
+    return {
+        "kind": "plot-2d",
+        "axes": axes,
+        "points": [
+            {"x": {"value": to_display(x), "exact": to_exact(x)},
+             "y": {"value": to_display(y), "exact": to_exact(y)}}
+            for x, y in points
+        ],
+    }
+
+
+def actors(ctx, *, bodies):
+    """Two or more named bodies with velocity arrows on a shared axis.
+
+    The relative-velocity figure: the frame comparison is the point, so each
+    body is named rather than positioned.
+    """
+    built = []
+    for body in bodies:
+        label = ctx.label(body["velocity"])
+        if label is None:
+            continue
+        built.append({"name": body["name"], "velocity": label})
+    return {"kind": "actors", "bodies": built}

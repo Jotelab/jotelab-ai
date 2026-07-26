@@ -3,7 +3,7 @@ value/exact) is enforced in DiagramContext.label, so every topic inherits it."""
 
 import sympy
 
-from templates.diagrams import DiagramContext, motion_1d
+from templates.diagrams import DiagramContext, actors, motion_1d, plot_2d
 from templates.suvat import SUVAT
 
 
@@ -90,3 +90,39 @@ def test_motion_1d_carries_orientation_and_reverse_direction():
     ])
     assert spec["orientation"] == "vertical"
     assert [s["direction"] for s in spec["segments"]] == ["forward", "reverse"]
+
+
+def test_plot_2d_emits_two_form_points_and_shows_all_values():
+    """plot-2d is the deliberate exception: the polyline IS the problem
+    statement for graph-reading splits, so points are always shown."""
+    ctx = _ctx(find_name="s")
+    spec = plot_2d(
+        ctx,
+        axes={"x": {"symbol": "t", "unit": "s"},
+              "y": {"symbol": "v", "unit": "m/s"}},
+        points=[(sympy.Integer(0), sympy.Integer(4)),
+                (sympy.Integer(3), sympy.Integer(10))],
+    )
+    assert spec["kind"] == "plot-2d"
+    assert spec["axes"]["y"] == {"symbol": "v", "unit": "m/s"}
+    assert spec["points"][1] == {"x": {"value": 3, "exact": "3"},
+                                 "y": {"value": 10, "exact": "10"}}
+
+
+def test_plot_2d_never_annotates_the_find_quantity():
+    """Points stay; a caption of the answer does not."""
+    ctx = _ctx(find_name="s")
+    spec = plot_2d(ctx, axes={"x": {"symbol": "t", "unit": "s"},
+                              "y": {"symbol": "v", "unit": "m/s"}},
+                   points=[(sympy.Integer(0), sympy.Integer(4))])
+    assert "annotations" not in spec
+
+
+def test_actors_labels_each_body_velocity():
+    ctx = _ctx()
+    spec = actors(ctx, bodies=[{"name": "A", "velocity": SUVAT.symbol("u")},
+                               {"name": "B", "velocity": SUVAT.symbol("v")}])
+    assert spec["kind"] == "actors"
+    assert spec["bodies"][0]["name"] == "A"
+    assert spec["bodies"][0]["velocity"]["exact"] == "5"
+    assert spec["bodies"][1]["velocity"]["role"] == "find"
