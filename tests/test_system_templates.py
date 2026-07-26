@@ -3,7 +3,9 @@
 import pytest
 import sympy
 
+from engine.errors import TemplateValidationError
 from templates.base import Template, VarSpec
+from templates.declarative import parse_template
 from templates.declarative.system import (Branch, SystemSolution,
                                           derive_branches,
                                           make_system_solvability)
@@ -75,3 +77,89 @@ def test_template_unit_for_resolves_auxiliaries():
     )
     assert tpl.unit_for(t) == "s"
     assert tpl.unit_for(x) == "m"
+
+
+def _toy_doc(**overrides):
+    doc = {
+        "topic": "toy-meet",
+        "variables": {
+            "d": {"unit": "m",   "ranges": {"easy": [2, 20, False], "medium": [2, 40, False], "hard": [2, 60, False]}},
+            "w": {"unit": "m/s", "ranges": {"easy": [1, 10, False], "medium": [1, 15, False], "hard": [1, 20, False]}},
+            "t": {"unit": "s",   "ranges": {"easy": [1, 10, False], "medium": [1, 20, False], "hard": [1, 30, False]}},
+        },
+        "auxiliary": {"p": {"unit": "m"}},
+        "equations": ["Eq(p, w*t)", "Eq(p, d)"],
+        "root_policy": {"name": "smallest_positive_physical"},
+        "constraints": [{"var": "t", "op": ">", "value": 0},
+                        {"var": "p", "op": ">", "value": 0}],
+        "default_split": {"given": ["d", "w"], "find": "t"},
+        "golden_cases": [{"given": {"d": 12, "w": 3}, "find": "t",
+                          "difficulty": "easy", "expected": "4"}],
+        "trust_state": "unverified",
+    }
+    doc.update(overrides)
+    return doc
+
+
+def test_parse_toy_system_doc():
+    tpl = parse_template(_toy_doc())
+    assert set(s.name for s in tpl.auxiliaries) == {"p"}
+    aux_p = next(iter(tpl.auxiliaries))
+    assert tpl.unit_for(aux_p) == "m"
+    ok, info = tpl.solvability(tpl.default_split[0], tpl.default_split[1])
+    assert ok is True and len(info.branches) == 1
+
+
+def test_parse_without_auxiliary_unchanged():
+    doc = _toy_doc()
+    del doc["auxiliary"]
+    doc["equations"] = ["Eq(d, w*t)"]
+    doc["constraints"] = [{"var": "t", "op": ">", "value": 0}]
+    tpl = parse_template(doc)
+    assert tpl.auxiliaries is None
+
+
+def test_parse_valid_splits_derived_for_system():
+    tpl = parse_template(_toy_doc())
+    finds = {f.name for _, f in tpl.valid_splits()}
+    assert finds == {"d", "w", "t"}
+
+
+def test_parse_rejects_aux_overlapping_variable():
+    with pytest.raises(TemplateValidationError):
+        parse_template(_toy_doc(auxiliary={"t": {"unit": "s"}}))
+
+
+def test_parse_rejects_aux_without_unit():
+    with pytest.raises(TemplateValidationError):
+        parse_template(_toy_doc(auxiliary={"p": {}}))
+
+
+def test_parse_rejects_aux_with_ranges():
+    with pytest.raises(TemplateValidationError):
+        parse_template(_toy_doc(
+            auxiliary={"p": {"unit": "m", "ranges": {"easy": [1, 5, False]}}}))
+
+
+def test_parse_rejects_empty_aux_block():
+    with pytest.raises(TemplateValidationError):
+        parse_template(_toy_doc(auxiliary={}))
+
+
+def test_parse_rejects_aux_in_default_split():
+    with pytest.raises(TemplateValidationError):
+        parse_template(_toy_doc(
+            default_split={"given": ["d", "p"], "find": "t"}))
+
+
+def test_parse_rejects_aux_in_golden_given():
+    with pytest.raises(TemplateValidationError):
+        parse_template(_toy_doc(
+            golden_cases=[{"given": {"d": 12, "p": 12}, "find": "t",
+                           "difficulty": "easy", "expected": "4"}]))
+
+
+def test_parse_equations_may_reference_aux():
+    # covered by test_parse_toy_system_doc; here: undeclared names still rejected
+    with pytest.raises(TemplateValidationError):
+        parse_template(_toy_doc(equations=["Eq(q, w*t)", "Eq(q, d)"]))

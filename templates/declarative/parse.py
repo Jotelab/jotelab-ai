@@ -25,6 +25,7 @@ from engine.errors import TemplateValidationError
 from templates.base import Template, VarSpec
 from templates.declarative.constraints import compile_constraints
 from templates.declarative.roots import make_root_select
+from templates.declarative.system import make_system_solvability
 
 # Callables an equation string may reference beyond the declared symbols.
 _ALLOWED_FUNCS = {
@@ -134,6 +135,30 @@ def trust_state_of(doc):
     return doc.get("trust_state", "unverified")
 
 
+def _parse_auxiliary(doc, variables):
+    """Validate the optional ``auxiliary`` block; return ``{name: unit}``.
+
+    Auxiliaries are internal unknowns (spec 2026-07-27): unit is mandatory
+    (dimensional gate), ranges are forbidden (never sampled), and names must
+    not collide with declared variables.
+    """
+    aux = doc.get("auxiliary")
+    if aux is None:
+        return None
+    if not isinstance(aux, dict) or not aux:
+        _fail("auxiliary block must be a non-empty object when present")
+    units = {}
+    for name, spec in aux.items():
+        if name in variables:
+            _fail(f"auxiliary {name!r} collides with a declared variable")
+        if not isinstance(spec, dict) or "unit" not in spec:
+            _fail(f"auxiliary {name!r} needs a 'unit'")
+        if "ranges" in spec:
+            _fail(f"auxiliary {name!r} must not declare ranges (never sampled)")
+        units[name] = spec["unit"]
+    return units
+
+
 def parse_template(doc) -> Template:
     """Parse a declarative JSON doc into a ``templates.base.Template`` (stage 1)."""
     topic = _require(doc, "topic")
@@ -143,16 +168,21 @@ def parse_template(doc) -> Template:
     constraints_raw = doc.get("constraints", [])
     split = _require(doc, "default_split")
 
+    aux_units = _parse_auxiliary(doc, variables)
+
     symbols = _build_symbols(variables)
-    all_syms = set(symbols.values())
-    namespace = dict(symbols)
+    aux_symbols = ({name: sympy.Symbol(name, real=True) for name in aux_units}
+                   if aux_units else {})
+    all_names = dict(symbols)
+    all_names.update(aux_symbols)
+    namespace = dict(all_names)
     namespace.update(_ALLOWED_FUNCS)
 
     equations = [_sympify_equation(text, namespace) for text in equations_raw]
     var_specs = {symbols[n]: spec for n, spec in _var_specs(variables).items()}
 
     try:
-        constraints = compile_constraints(constraints_raw, symbols)
+        constraints = compile_constraints(constraints_raw, all_names)
         root_select = make_root_select(root_policy, constraints)
     except ValueError as exc:
         _fail(str(exc))
@@ -165,14 +195,33 @@ def parse_template(doc) -> Template:
     except KeyError as exc:
         _fail(f"default_split references undeclared variable {exc}")
 
+    if aux_symbols:
+        banned = set(aux_symbols)
+        split_names = set(split["given"]) | {split["find"]}
+        if split_names & banned:
+            _fail("default_split must not reference auxiliary variables")
+        for i, case in enumerate(doc.get("golden_cases", [])):
+            if set(case.get("given", {})) & banned:
+                _fail(f"golden case {i} pins an auxiliary variable")
+
+    if aux_symbols:
+        solvability = make_system_solvability(
+            equations, set(symbols.values()), set(aux_symbols.values()))
+        auxiliaries = {aux_symbols[n]: aux_units[n] for n in aux_symbols}
+    else:
+        all_syms = set(symbols.values())
+        solvability = _make_solvability(equations, all_syms)
+        auxiliaries = None
+
     return Template(
         topic=topic,
         symbols=symbols,
         variables=var_specs,
         equations=equations,
-        solvability=_make_solvability(equations, all_syms),
+        solvability=solvability,
         constraints=constraints.loop_predicates,
         root_select=root_select,
         default_split=(given, find),
         signed_answer=bool(doc.get("signed_answer", False)),
+        auxiliaries=auxiliaries,
     )
