@@ -78,7 +78,8 @@ def temporary(template):
 # validation gate in CI (``tests/test_*`` + ``python -m templates.declarative``).
 # They are parsed straight into the registry — the gate is a build-time check,
 # not an import-time cost.
-_DECLARATIVE_TOPICS = ("vectors_1d.json", "free_fall.json", "relative_velocity.json")
+_DECLARATIVE_TOPICS = ("vectors_1d.json", "free_fall.json",
+                       "relative_velocity.json", "pursuit.json")
 _declarative_loaded = False
 
 
