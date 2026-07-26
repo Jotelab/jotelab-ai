@@ -197,3 +197,65 @@ def test_contract_without_aux_values_has_no_key():
         policy=type("P", (), {"label": "easy"})(), plausible=True,
     )
     assert "auxiliary" not in data
+
+
+from engine import registry
+from engine.errors import NoCleanInstanceError
+from engine.loop import generate
+
+
+def test_generate_system_template_end_to_end():
+    tpl = parse_template(_toy_doc())
+    with registry.temporary(tpl):
+        data = generate("toy-meet", given=["d", "w"], find="t",
+                        conditions={"d": 12, "w": 3}, difficulty="easy", seed=1)
+    assert data["find"]["exact"] == "4"
+    assert data["auxiliary"] == [
+        {"symbol": "p", "value": 12, "exact": "12", "unit": "m"}
+    ]
+
+
+def test_generate_system_respects_aux_constraint():
+    # p > 0 is declared; pin d < 0 so p = d violates it -> no clean instance.
+    tpl = parse_template(_toy_doc())
+    with registry.temporary(tpl):
+        with pytest.raises(NoCleanInstanceError):
+            generate("toy-meet", given=["d", "w"], find="t",
+                     conditions={"d": -12, "w": 3}, difficulty="medium",
+                     seed=1, max_attempts=10)
+
+
+IRR_DOC = {
+    "topic": "toy-irr",
+    "variables": {
+        "c": {"unit": "1", "ranges": {"easy": [2, 2, False], "medium": [2, 2, False], "hard": [2, 2, False]}},
+        "t": {"unit": "1", "ranges": {"easy": [1, 10, False], "medium": [1, 10, False], "hard": [1, 10, False]}},
+    },
+    "auxiliary": {"q": {"unit": "1"}},
+    "equations": ["Eq(q**2, c)", "Eq(t, c)"],
+    "root_policy": {"name": "smallest_positive_physical"},
+    "constraints": [],
+    "default_split": {"given": ["c"], "find": "t"},
+    "golden_cases": [{"given": {"c": 4}, "find": "t", "difficulty": "easy",
+                      "expected": "4"}],
+    "trust_state": "unverified",
+}
+
+
+def test_irrational_auxiliary_is_a_failed_roll():
+    # c = 2 -> q = ±sqrt(2): find t=2 is clean but q is irrational -> re-roll
+    # forever -> NoCleanInstanceError (spec: auxiliaries must be Rational).
+    tpl = parse_template(IRR_DOC)
+    with registry.temporary(tpl):
+        with pytest.raises(NoCleanInstanceError):
+            generate("toy-irr", given=["c"], find="t", conditions={"c": 2},
+                     difficulty="easy", seed=1, max_attempts=10)
+
+
+def test_rational_auxiliary_generates():
+    tpl = parse_template(IRR_DOC)
+    with registry.temporary(tpl):
+        data = generate("toy-irr", given=["c"], find="t", conditions={"c": 4},
+                        difficulty="easy", seed=1)
+    assert data["find"]["exact"] == "4"
+    assert data["auxiliary"][0]["exact"] in ("2", "-2")

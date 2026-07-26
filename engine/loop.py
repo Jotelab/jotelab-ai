@@ -64,13 +64,15 @@ def generate(topic, given=None, find=None, conditions=None, difficulty="easy",
         inputs = sampling.sample(template, given, conditions, difficulty, seed + attempt)
         solved = _solve(equation, find, inputs, template, difficulty)
         if solved is not None:
-            value, sym_expr = solved
+            value, sym_expr, aux_values = solved
             values = dict(inputs)
             values[find] = value
+            values.update(aux_values)
             if _satisfies(values, find, template, pol, difficulty):
                 return contract.build_sympy_data(
                     template, given, find, inputs, value, sym_expr,
                     seed=seed, policy=pol, plausible=True,
+                    aux_values=aux_values,
                 )
         if attempt == soft_limit:
             pol = policy_mod.loosen(pol)  # graceful degradation (spec §5, §6)
@@ -78,16 +80,20 @@ def generate(topic, given=None, find=None, conditions=None, difficulty="easy",
     raise NoCleanInstanceError(topic, find.name, attempts=max_attempts)
 
 
-def _solve(equation, find, inputs, template, difficulty):
-    """Solve ``equation`` for ``find`` at ``inputs`` — exact, symbolic (spec §5).
+def _solve(info, find, inputs, template, difficulty):
+    """Solve for ``find`` at ``inputs`` — exact, symbolic (spec §5).
 
-    Returns ``(value, sym_expr)`` where ``value`` is the chosen physical root
-    (exact SymPy number) and ``sym_expr`` is the symbolic solution that produced
-    it (for step rendering). Returns ``None`` for a failed roll (no physical root,
-    or a degenerate/zero-division sample — treated as re-roll, spec §9).
+    ``info`` is what ``solvability`` returned: a single linking equation, or a
+    system-template solution object (duck-typed via ``.branches`` — see
+    templates/declarative/system.py for why there is no import here). Returns
+    ``(value, sym_expr, aux_values)`` — ``aux_values`` is ``{}`` on the
+    single-equation path — or ``None`` for a failed roll.
     """
+    branches = getattr(info, "branches", None)
+    if branches is not None:
+        return _solve_system(branches, find, inputs, template, difficulty)
     try:
-        sym_sols = sympy.solve(equation, find)
+        sym_sols = sympy.solve(info, find)
     except (ZeroDivisionError, NotImplementedError):
         return None
     candidates = []  # (value, sym_expr)
@@ -105,7 +111,44 @@ def _solve(equation, find, inputs, template, difficulty):
         return None
     for val, expr in candidates:
         if sympy.simplify(val - chosen) == 0:
-            return chosen, expr
+            return chosen, expr, {}
+    return None
+
+
+def _solve_system(branches, find, inputs, template, difficulty):
+    """Evaluate cached system branches; keep auxiliaries branch-consistent.
+
+    The find candidates are root-selected exactly like single-equation roots;
+    the auxiliaries are then evaluated from the SAME branch as the chosen
+    value (spec 2026-07-27) and must all be exact rationals — anything else
+    is a failed roll (ADR-005 keeps the exact() parser Rational-only).
+    """
+    candidates = []  # (value, branch)
+    for branch in branches:
+        try:
+            val = sympy.nsimplify(branch.find_expr.subs(inputs))
+        except (ZeroDivisionError, ValueError):
+            continue
+        if val.is_real and val.is_number:
+            candidates.append((val, branch))
+    if not candidates:
+        return None
+    chosen = template.root_select([c[0] for c in candidates], find, difficulty)
+    if chosen is None:
+        return None
+    for val, branch in candidates:
+        if sympy.simplify(val - chosen) != 0:
+            continue
+        aux_values = {}
+        for aux_sym, expr in branch.aux_exprs.items():
+            try:
+                aval = sympy.nsimplify(expr.subs(inputs))
+            except (ZeroDivisionError, ValueError):
+                return None
+            if not (aval.is_number and aval.is_rational):
+                return None  # non-rational auxiliary -> re-roll
+            aux_values[aux_sym] = aval
+        return chosen, branch.find_expr, aux_values
     return None
 
 
