@@ -25,6 +25,8 @@ from engine.errors import TemplateValidationError
 from templates.base import Template, VarSpec
 from templates.declarative.constraints import compile_constraints
 from templates.declarative.roots import make_root_select
+from templates.diagrams import actors as _actors
+from templates.diagrams import motion_1d as _motion_1d
 
 # Callables an equation string may reference beyond the declared symbols.
 _ALLOWED_FUNCS = {
@@ -129,6 +131,48 @@ def _make_solvability(equations, all_syms):
     return solvability
 
 
+def _diagram_hook(doc, symbols):
+    """Compile an optional "diagram" JSON block into a diagram_spec callable.
+
+    The JSON declares *structure only* — which builder, and how the topic's
+    symbols map onto its roles. Values, roles, and units are filled in at
+    generation time by the shared builder, so a declarative topic can never
+    author a number.
+    """
+    decl = doc.get("diagram")
+    if decl is None:
+        return None
+
+    kind = decl.get("kind")
+    if kind == "motion-1d":
+        orientation = decl.get("orientation", "horizontal")
+        segments = []
+        for seg in decl.get("segments", []):
+            out = {"direction": seg.get("direction", "forward")}
+            for role, name in seg.items():
+                if role == "direction":
+                    continue
+                try:
+                    out[role] = symbols[name]
+                except KeyError:
+                    _fail(f"diagram references undeclared variable {name!r}")
+            segments.append(out)
+        return lambda ctx: _motion_1d(ctx, orientation=orientation,
+                                      segments=segments)
+
+    if kind == "actors":
+        bodies = []
+        for body in decl.get("bodies", []):
+            try:
+                bodies.append({"name": body["name"],
+                               "velocity": symbols[body["velocity"]]})
+            except KeyError as exc:
+                _fail(f"diagram body is malformed or undeclared: {exc}")
+        return lambda ctx: _actors(ctx, bodies=bodies)
+
+    _fail(f"unknown diagram kind {kind!r}")
+
+
 def trust_state_of(doc):
     """The template's provenance trust state (ADR-007 e); a carried field only."""
     return doc.get("trust_state", "unverified")
@@ -175,4 +219,5 @@ def parse_template(doc) -> Template:
         root_select=root_select,
         default_split=(given, find),
         signed_answer=bool(doc.get("signed_answer", False)),
+        diagram_spec=_diagram_hook(doc, symbols),
     )

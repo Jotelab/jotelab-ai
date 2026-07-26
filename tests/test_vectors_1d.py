@@ -107,3 +107,13 @@ def test_registered_and_loadable():
 
 def test_signed_answer_flag_is_set():
     assert parse_template(_doc()).signed_answer is True
+
+
+def test_declarative_diagram_key_produces_a_motion_1d_spec():
+    data = generate("vectors-1d", given=("s", "t"), find="v",
+                    difficulty="easy", seed=4)
+    seg = data["diagram"]["segments"][0]
+    assert data["diagram"]["kind"] == "motion-1d"
+    assert seg["span"]["symbol"] == "s"
+    assert seg["velocity_out"]["role"] == "find"
+    assert "value" not in seg["velocity_out"]

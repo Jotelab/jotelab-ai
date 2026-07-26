@@ -9,7 +9,7 @@ from engine.loop import generate
 
 
 def test_topics_without_hook_emit_no_diagram_key():
-    data = generate("suvat", difficulty="easy", seed=3)
+    data = generate("average-speed", difficulty="easy", seed=3)
     assert "diagram" not in data
 
 

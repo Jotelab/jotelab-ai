@@ -17,6 +17,7 @@ from __future__ import annotations
 import sympy
 
 from .base import Template, VarSpec
+from .diagrams import motion_1d
 
 # -- symbols (real-valued; equality is by name so dict keys are stable) --------
 u, v, a, t, s = sympy.symbols("u v a t s", real=True)
@@ -147,6 +148,15 @@ def _c_easy_nonneg(values, difficulty):
 CONSTRAINTS = [_c_time_positive, _c_speed_bounded, _c_accel_nonzero, _c_easy_nonneg]
 
 
+# -- the diagram payload --------------------------------------------------------
+def diagram_spec(ctx):
+    """One forward segment carrying whichever of u/a/v/s/t this split uses."""
+    return motion_1d(ctx, segments=[{
+        "velocity_in": u, "acceleration": a, "velocity_out": v,
+        "span": s, "duration": t,
+    }])
+
+
 # -- the template object -------------------------------------------------------
 SUVAT = Template(
     topic="suvat",
@@ -157,4 +167,5 @@ SUVAT = Template(
     constraints=CONSTRAINTS,
     root_select=root_select,
     default_split=((u, a, t), v),  # spec §8 worked example
+    diagram_spec=diagram_spec,
 )

@@ -16,6 +16,13 @@
   ],
   "signed_answer": true,
   "default_split": {"given": ["s", "t"], "find": "v"},
+  "diagram": {
+    "kind": "motion-1d",
+    "orientation": "horizontal",
+    "segments": [
+      {"direction": "forward", "velocity_out": "v", "span": "s", "duration": "t"}
+    ]
+  },
   "golden_cases": [
     {"given": {"s": -12, "t": 4}, "find": "v", "difficulty": "easy", "expected": "-3"},
     {"given": {"s": 30, "t": 5}, "find": "v", "difficulty": "easy", "expected": "6"}

@@ -26,6 +26,13 @@
     {"var": "a", "op": ">=",    "value": 0, "difficulty": "easy", "scope": "root"}
   ],
   "default_split": {"given": ["u", "a", "t"], "find": "v"},
+  "diagram": {
+    "kind": "motion-1d",
+    "orientation": "horizontal",
+    "segments": [
+      {"direction": "forward", "velocity_in": "u", "acceleration": "a", "velocity_out": "v", "span": "s", "duration": "t"}
+    ]
+  },
   "golden_cases": [
     {"given": {"u": 0, "a": 2, "t": 5}, "find": "v", "difficulty": "easy", "expected": "10"}
   ],
