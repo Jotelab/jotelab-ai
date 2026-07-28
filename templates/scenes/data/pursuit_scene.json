@@ -1,0 +1,38 @@
+{
+  "topic": "pursuit-scene",
+  "bodies": [
+    {
+      "name": "runner",
+      "phases": [
+        {"kind": "constant-velocity", "v": "v", "duration": "auto"}
+      ]
+    },
+    {
+      "name": "bus",
+      "phases": [
+        {"kind": "constant-acceleration", "u": 0, "a": "a", "duration": "auto"}
+      ]
+    }
+  ],
+  "given": {
+    "gap": {"unit": "m",     "ranges": {"easy": [2, 12, false], "medium": [2, 40, false], "hard": [2, 80, false]}},
+    "a":   {"unit": "m/s^2", "ranges": {"easy": [1, 3, false],  "medium": [1, 6, false],  "hard": [1, 10, false]}},
+    "v":   {"unit": "m/s",   "ranges": {"easy": [3, 12, false], "medium": [3, 25, false], "hard": [3, 40, false]}}
+  },
+  "sought": {
+    "quantity": "duration_of_phase", "body": "runner", "phase": 1, "name": "t",
+    "unit": "s", "ranges": {"easy": [1, 10, false], "medium": [1, 20, false], "hard": [1, 30, false]}
+  },
+  "events": [
+    {"kind": "meet", "bodies": ["runner", "bus"],
+     "head_start": {"body": "bus", "given": "gap"}, "at_end_of_phase": 1}
+  ],
+  "constraints": [
+    {"var": "a", "op": ">", "value": 0},
+    {"var": "v", "op": "abs<=", "value": 100}
+  ],
+  "golden_cases": [
+    {"given": {"gap": 6, "a": 1, "v": "7/2"}, "difficulty": "easy", "expected": "3"}
+  ],
+  "trust_state": "unverified"
+}

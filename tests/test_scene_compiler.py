@@ -4,11 +4,14 @@ Also covers Task 2 (principle KB, per-phase equation emission) and Task 3
 (the compiler: scene -> system-template doc)."""
 
 import copy
+import json
+from pathlib import Path
 
 import pytest
+import sympy
 
 from engine.loop import generate
-from engine.registry import temporary
+from engine.registry import load_template, temporary
 from harness.verify import verify_generic
 from templates.declarative.gate import validate_template
 from templates.declarative.parse import parse_template
@@ -412,3 +415,44 @@ def test_compile_meet_event_two_car_style():
             conditions={"gap": 0, "va": 20, "vb": 10, "ab": 4}, difficulty="easy", seed=1,
         )
     assert data["find"]["exact"] == "5"
+
+
+# --- Task 4: pursuit re-derived from a scene, behavioral parity ------------
+
+PURSUIT_SCENE_JSON = (
+    Path(__file__).resolve().parents[1] / "templates" / "scenes" / "data" / "pursuit_scene.json"
+)
+
+
+def test_pursuit_scene_behaviorally_identical_to_hand_written_pursuit():
+    scene = json.loads(PURSUIT_SCENE_JSON.read_text())
+    doc = compile_scene(scene)
+    assert set(doc["auxiliary"]) == {"s_runner_1", "s_bus_1", MEET_NAME}
+
+    report = validate_template(doc, n_smoke=2)
+    assert report.passed, [(s.number, s.passed, s.reason) for s in report.stages]
+
+    tpl = parse_template(doc)
+    conditions = {"gap": 6, "a": 1, "v": sympy.Rational(7, 2)}
+    with temporary(tpl):
+        compiled_data = generate(
+            "pursuit-scene", given=["a", "gap", "v"], find="t",
+            conditions=conditions, difficulty="easy", seed=1,
+        )
+    assert compiled_data["find"]["exact"] == "3"
+    compiled_aux_by_symbol = {a["symbol"]: a for a in compiled_data["auxiliary"]}
+    assert compiled_aux_by_symbol[MEET_NAME]["exact"] == "21/2"
+
+    # Behavioral parity by value against the hand-written topic under
+    # identical conditions: same find answer, same meet-point value (the
+    # hand-written template names its meet-point auxiliary "x", not "x_meet").
+    hand_written_data = generate(
+        "pursuit", given=["gap", "a", "v"], find="t",
+        conditions=conditions, difficulty="easy", seed=1,
+    )
+    hand_written_aux_by_symbol = {a["symbol"]: a for a in hand_written_data["auxiliary"]}
+    assert compiled_data["find"]["exact"] == hand_written_data["find"]["exact"]
+    assert (
+        compiled_aux_by_symbol[MEET_NAME]["exact"]
+        == hand_written_aux_by_symbol["x"]["exact"]
+    )
