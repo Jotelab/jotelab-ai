@@ -87,3 +87,13 @@ def test_only_two_valid_splits():
 def test_registered_and_loadable():
     assert "average-speed" in registry.topics()
     assert registry.load_template("average-speed").topic == "average-speed"
+
+
+def test_diagram_draws_both_legs():
+    data = generate("average-speed", given=("d1", "d2", "t"), find="vavg",
+                    difficulty="easy", seed=6)
+    segs = data["diagram"]["segments"]
+    assert len(segs) == 2
+    assert segs[0]["span"]["symbol"] == "d1"
+    assert segs[1]["span"]["symbol"] == "d2"
+    assert all(s["direction"] == "forward" for s in segs)

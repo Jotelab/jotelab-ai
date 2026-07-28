@@ -27,6 +27,7 @@ import sympy
 
 from .base import (Template, VarSpec, real_candidates, smallest_nonnegative,
                    smallest_positive)
+from .diagrams import motion_1d
 
 # -- symbols -------------------------------------------------------------------
 u, a, t1, t2, v, s = sympy.symbols("u a t1 t2 v s", real=True)
@@ -126,6 +127,16 @@ CONSTRAINTS = [_c_times_positive, _c_start_nonneg, _c_cruise_forward,
                _c_displacement_positive]
 
 
+# -- the diagram payload --------------------------------------------------------
+def diagram_spec(ctx):
+    """Phase 1 accelerates from u to the cruise velocity; phase 2 holds it."""
+    return motion_1d(ctx, segments=[
+        {"velocity_in": u, "acceleration": a, "velocity_out": v,
+         "duration": t1},
+        {"velocity_in": v, "duration": t2, "span": s},
+    ])
+
+
 # -- the template object -------------------------------------------------------
 MULTI_STAGE = Template(
     topic="multi-stage-motion",
@@ -136,4 +147,5 @@ MULTI_STAGE = Template(
     constraints=CONSTRAINTS,
     root_select=root_select,
     default_split=((u, a, t1, t2), s),
+    diagram_spec=diagram_spec,
 )
