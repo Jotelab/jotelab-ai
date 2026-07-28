@@ -1,9 +1,18 @@
 """Scene compiler ontology (spec 2026-07-29, Task 1): names, units, rendering.
 
-Also covers Task 2 (principle KB, per-phase equation emission)."""
+Also covers Task 2 (principle KB, per-phase equation emission) and Task 3
+(the compiler: scene -> system-template doc)."""
+
+import copy
 
 import pytest
 
+from engine.loop import generate
+from engine.registry import temporary
+from harness.verify import verify_generic
+from templates.declarative.gate import validate_template
+from templates.declarative.parse import parse_template
+from templates.scenes.compile import compile_scene
 from templates.scenes.kb import phase_equations
 from templates.scenes.ontology import (
     MEET_NAME,
@@ -141,3 +150,216 @@ def test_phase_equations_unknown_kind_raises():
     phase = {"kind": "constant-jerk", "duration": "t_1"}
     with pytest.raises(SceneError):
         phase_equations("body", 1, phase, None, False, set())
+
+
+# --- Task 3: compile_scene -------------------------------------------------
+
+
+def _two_phase_ascent_scene():
+    """The plan's own worked example (two-phase-ascent), as a fresh dict."""
+    return {
+        "topic": "two-phase-ascent",
+        "bodies": [
+            {
+                "name": "rocket",
+                "phases": [
+                    {"kind": "constant-acceleration", "u": 0, "a": "a", "duration": "t1"},
+                    {"kind": "constant-acceleration", "u": "auto", "a": "neg:g",
+                     "duration": "auto", "end_condition": {"v": 0}},
+                ],
+            }
+        ],
+        "given": {
+            "a": {"unit": "m/s^2", "ranges": {"easy": [2, 10, False], "medium": [2, 15, False], "hard": [2, 20, False]}},
+            "t1": {"unit": "s", "ranges": {"easy": [2, 10, False], "medium": [2, 15, False], "hard": [2, 20, False]}},
+            "g": {"unit": "m/s^2", "ranges": {"easy": [10, 10, False], "medium": [10, 10, False], "hard": [10, 10, False]}},
+        },
+        "sought": {"quantity": "total_displacement", "body": "rocket", "name": "H",
+                   "unit": "m", "ranges": {"easy": [1, 2000, False], "medium": [1, 4000, False], "hard": [1, 8000, False]}},
+        "events": [],
+        "constraints": [],
+        "golden_cases": [
+            {"given": {"a": 8, "t1": 10, "g": 10}, "difficulty": "easy", "expected": "720"},
+        ],
+        "trust_state": "unverified",
+    }
+
+
+# (a) the two-phase-ascent scene compiles with the exact aux keys, equation
+# count, and default_split from the plan's worked example.
+def test_compile_two_phase_ascent():
+    doc = compile_scene(_two_phase_ascent_scene())
+    assert set(doc["auxiliary"]) == {
+        "s_rocket_1", "vend_rocket_1", "s_rocket_2", "vend_rocket_2", "t_2",
+    }
+    assert len(doc["equations"]) == 6
+    assert doc["default_split"] == {"given": ["a", "g", "t1"], "find": "H"}
+
+
+# (b) the compiled doc parses and passes the full existing gate.
+def test_compile_two_phase_ascent_passes_the_gate():
+    doc = compile_scene(_two_phase_ascent_scene())
+    parse_template(doc)  # must not raise
+    report = validate_template(doc, n_smoke=2)
+    assert report.passed, [(s.number, s.passed, s.reason) for s in report.stages]
+
+
+# (c) removing the end_condition makes the scene underdetermined.
+def test_compile_missing_end_condition_is_underdetermined():
+    scene = _two_phase_ascent_scene()
+    del scene["bodies"][0]["phases"][1]["end_condition"]
+    with pytest.raises(SceneError, match="underdetermined/overdetermined"):
+        compile_scene(scene)
+
+
+# (d) unknown phase kind / undeclared given name / colliding sought name.
+def test_compile_unknown_phase_kind_raises():
+    scene = _two_phase_ascent_scene()
+    scene["bodies"][0]["phases"][0]["kind"] = "constant-jerk"
+    with pytest.raises(SceneError):
+        compile_scene(scene)
+
+
+def test_compile_undeclared_given_name_raises():
+    scene = _two_phase_ascent_scene()
+    scene["bodies"][0]["phases"][0]["a"] = "b"  # "b" is not a declared given
+    with pytest.raises(SceneError):
+        compile_scene(scene)
+
+
+def test_compile_colliding_sought_name_raises():
+    scene = _two_phase_ascent_scene()
+    scene["sought"]["name"] = "a"  # collides with the given "a"
+    with pytest.raises(SceneError):
+        compile_scene(scene)
+
+
+# (e) generate + verify_generic on the parsed template reproduce the plan's
+# worked numbers exactly, including the auxiliary t_2.
+def test_compile_two_phase_ascent_generate_exact():
+    doc = compile_scene(_two_phase_ascent_scene())
+    tpl = parse_template(doc)
+    with temporary(tpl):
+        data = generate(
+            "two-phase-ascent", given=["a", "g", "t1"], find="H",
+            conditions={"a": 8, "t1": 10, "g": 10}, difficulty="easy", seed=1,
+        )
+    assert data["find"]["exact"] == "720"
+    aux_by_symbol = {a["symbol"]: a for a in data["auxiliary"]}
+    assert aux_by_symbol["t_2"]["exact"] == "8"
+    assert verify_generic(data, tpl, difficulty="easy") is True
+
+
+# --- extra coverage for the v1 rejections (self-review checklist) ----------
+
+
+def test_compile_unknown_top_level_key_raises():
+    scene = _two_phase_ascent_scene()
+    scene["unexpected"] = True
+    with pytest.raises(SceneError):
+        compile_scene(scene)
+
+
+def test_compile_duplicate_body_name_raises():
+    scene = _two_phase_ascent_scene()
+    scene["bodies"].append(copy.deepcopy(scene["bodies"][0]))
+    with pytest.raises(SceneError):
+        compile_scene(scene)
+
+
+def test_compile_non_identifier_body_name_raises():
+    scene = _two_phase_ascent_scene()
+    scene["bodies"][0]["name"] = "not-an-identifier"
+    with pytest.raises(SceneError):
+        compile_scene(scene)
+
+
+def test_compile_multi_phase_multi_body_rejected_as_v2():
+    scene = _two_phase_ascent_scene()
+    second = copy.deepcopy(scene["bodies"][0])
+    second["name"] = "rocket2"
+    scene["bodies"].append(second)
+    with pytest.raises(SceneError, match="v2"):
+        compile_scene(scene)
+
+
+def test_compile_meet_deeper_than_phase_1_rejected_as_v2():
+    scene = {
+        "topic": "two-car-meet",
+        "bodies": [
+            {"name": "carA", "phases": [{"kind": "constant-velocity", "v": "va", "duration": "auto"}]},
+            {"name": "carB", "phases": [{"kind": "constant-velocity", "v": "vb", "duration": "auto"}]},
+        ],
+        "given": {
+            "va": {"unit": "m/s", "ranges": {"easy": [1, 10, False], "medium": [1, 10, False], "hard": [1, 10, False]}},
+            "vb": {"unit": "m/s", "ranges": {"easy": [1, 10, False], "medium": [1, 10, False], "hard": [1, 10, False]}},
+            "t": {"unit": "s", "ranges": {"easy": [1, 10, False], "medium": [1, 10, False], "hard": [1, 10, False]}},
+            "gap": {"unit": "m", "ranges": {"easy": [1, 10, False], "medium": [1, 10, False], "hard": [1, 10, False]}},
+        },
+        "sought": {"quantity": "duration_of_phase", "body": "carA", "phase": 1, "name": "t",
+                   "unit": "s", "ranges": {"easy": [1, 10, False], "medium": [1, 10, False], "hard": [1, 10, False]}},
+        "events": [{"kind": "meet", "bodies": ["carA", "carB"],
+                    "head_start": {"body": "carB", "given": "gap"}, "at_end_of_phase": 2}],
+        "constraints": [],
+        "golden_cases": [],
+        "trust_state": "unverified",
+    }
+    with pytest.raises(SceneError, match="v2"):
+        compile_scene(scene)
+
+
+def test_compile_unknown_sought_kind_raises():
+    scene = _two_phase_ascent_scene()
+    scene["sought"]["quantity"] = "average_speed"
+    with pytest.raises(SceneError):
+        compile_scene(scene)
+
+
+def test_compile_unknown_event_kind_raises():
+    scene = _two_phase_ascent_scene()
+    scene["events"] = [{"kind": "collision", "bodies": ["rocket"]}]
+    with pytest.raises(SceneError):
+        compile_scene(scene)
+
+
+def test_compile_meet_event_two_car_style():
+    # Two bodies, one phase each (v1's allowed shape), sought = duration_of_phase
+    # via the shared t_1 auxiliary the meet event's equations pin down.
+    scene = {
+        "topic": "two-car-meet-scene",
+        "bodies": [
+            {"name": "carA", "phases": [
+                {"kind": "constant-velocity", "v": "va", "duration": "auto"},
+            ]},
+            {"name": "carB", "phases": [
+                {"kind": "constant-acceleration", "u": "vb", "a": "ab", "duration": "auto"},
+            ]},
+        ],
+        "given": {
+            "va": {"unit": "m/s", "ranges": {"easy": [6, 20, False], "medium": [6, 30, False], "hard": [6, 40, False]}},
+            "vb": {"unit": "m/s", "ranges": {"easy": [1, 5, False], "medium": [1, 10, False], "hard": [1, 15, False]}},
+            "ab": {"unit": "m/s^2", "ranges": {"easy": [1, 4, False], "medium": [1, 6, False], "hard": [1, 8, False]}},
+            "gap": {"unit": "m", "ranges": {"easy": [0, 10, False], "medium": [0, 30, False], "hard": [0, 60, False]}},
+        },
+        "sought": {"quantity": "duration_of_phase", "body": "carA", "phase": 1, "name": "t",
+                   "unit": "s", "ranges": {"easy": [1, 10, False], "medium": [1, 20, False], "hard": [1, 30, False]}},
+        "events": [{"kind": "meet", "bodies": ["carA", "carB"],
+                    "head_start": {"body": "carB", "given": "gap"}, "at_end_of_phase": 1}],
+        "constraints": [],
+        "golden_cases": [
+            {"given": {"gap": 0, "va": 20, "vb": 10, "ab": 4}, "difficulty": "easy", "expected": "5"},
+        ],
+        "trust_state": "unverified",
+    }
+    doc = compile_scene(scene)
+    assert set(doc["auxiliary"]) == {"s_carA_1", "s_carB_1", MEET_NAME}
+    assert doc["default_split"] == {"given": ["ab", "gap", "va", "vb"], "find": "t"}
+    report = validate_template(doc, n_smoke=2)
+    assert report.passed, [(s.number, s.passed, s.reason) for s in report.stages]
+    tpl = parse_template(doc)
+    with temporary(tpl):
+        data = generate(
+            "two-car-meet-scene", given=["ab", "gap", "va", "vb"], find="t",
+            conditions={"gap": 0, "va": 20, "vb": 10, "ab": 4}, difficulty="easy", seed=1,
+        )
+    assert data["find"]["exact"] == "5"
