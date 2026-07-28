@@ -70,6 +70,8 @@ templates/               # topic templates
   suvat.py               #   SUVAT as code — the built-in reference template
   declarative/           #   ADR-007: declarative-template parser + 5-stage validation gate + CLI
   data/suvat.json        #   SUVAT re-expressed as declarative data (byte-parity with suvat.py)
+  scenes/                #   scene compiler: a physical setup (bodies/phases) -> template doc
+    data/two_phase_ascent.json  #   registered topic "two-phase-ascent"
 harness/                 # Data Fidelity verification harness (independent re-derivation)
 app/                     # Next.js App Router (Generate + Library)
 components/              # shadcn/ui components, the A4 Canvas
@@ -111,6 +113,52 @@ Validate a template document from the command line:
 
 ```bash
 python -m templates.declarative templates/data/suvat.json   # per-stage PASS/FAIL report; exit 0 on all-pass
+```
+
+## Scene topics (Andes-lite milestone 1)
+
+A **scene** ([`templates/scenes/`](templates/scenes/)) is a higher-level authoring format for
+declarative topics: instead of writing equations by hand, an author describes the *physical setup* —
+one or more bodies, each moving through an ordered list of phases (e.g. constant-acceleration up,
+then constant-acceleration down to `v=0`), plus which quantities are `given` and what is `sought`. A
+small **compiler** (`templates/scenes/compile.py`, `compile_scene(scene_dict) -> template_doc`) walks
+the phases, calls a per-phase **kinematics KB** (`templates/scenes/kb.py`) to emit the SUVAT
+equations and auxiliary variables each phase needs, threads state across phase boundaries (a phase's
+end state feeds the next phase's start state), and checks the result is well-posed before handing
+back an ordinary template document — the same shape `templates/declarative/parse.py` already
+consumes. `templates/scenes/ontology.py` owns naming/units/rendering and the typed `SceneError`.
+
+Registration is **compile-at-registry-load**: `engine/registry.py` lists scene JSON files in an
+`_SCENE_TOPICS` tuple (currently `two_phase_ascent.json`, registered under the topic
+`two-phase-ascent`), and on the first lazy registry lookup it runs each one through
+`compile_scene` before parsing the result with `parse_template` — a scene is never a special case
+downstream; by the time a topic is in the registry it is indistinguishable from a hand-authored
+declarative template. `templates/scenes/data/pursuit_scene.json` is a test fixture only (the
+hand-written `pursuit` declarative topic already owns that topic name); it is not in `_SCENE_TOPICS`
+and is not registered.
+
+One documented v1 limitation: an `end_condition` of `{"v": k}` only supports `k=0` — the compiler
+derives the phase duration (`Eq(t_i, (k-u)/a)`) instead of equating a bare numeral to a
+unit-carrying auxiliary, because the latter fails the frozen dimensional-homogeneity gate stage;
+nonzero `k` raises `SceneError` today.
+
+Out of scope for this milestone (not built): scene *sampling*/grammar (random scene generation),
+multi-phase multi-body scenes, meets deeper than phase 1, graph payloads for scenes, non-kinematics
+principle families, and any user-authored scene upload/validation UI.
+
+How to test:
+
+```bash
+# the scene-compiler unit tests (43 tests: ontology, KB, compile, well-posedness, registry wiring)
+pytest tests/test_scene_compiler.py -q
+
+# generate + verify an instance of the registered scene topic through the real engine loop
+# (pin the given/find split — the topic's default sought variable H is the only reliably
+# solvable find in this v1 scene; other splits can occasionally miss within the re-roll budget)
+python -m engine --topic two-phase-ascent --given a,t1,g --find H --verify
+
+# compile a scene straight through the five-stage gate, bypassing the registry
+python -c "import json; from templates.scenes import compile_scene; from templates.declarative.gate import validate_template; print(validate_template(compile_scene(json.load(open('templates/scenes/data/two_phase_ascent.json'))), n_smoke=2).passed)"
 ```
 
 ## Prerequisites
