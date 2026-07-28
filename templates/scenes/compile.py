@@ -168,7 +168,7 @@ def compile_scene(scene: dict) -> dict:
     }
 
     _check_determinism(equations, aux)
-    _check_no_unused_given(equations, remaining_given_names)
+    _check_no_unused_given(equations, constraints, remaining_given_names)
 
     return doc
 
@@ -488,14 +488,45 @@ def _referenced_names(equations):
     return names
 
 
-def _check_no_unused_given(equations, remaining_given_names):
-    """Reject a given that no emitted equation references.
+def _referenced_names_in_constraints(constraints):
+    """Collect names referenced by the doc's own ``constraints`` entries.
+
+    ``templates.declarative.constraints.compile_constraints`` treats a
+    constraint's ``var`` field as a plain symbol name (looked up directly in
+    the template's symbol table), so it always counts as a reference. Its
+    ``value`` field is passed through ``sympy.nsimplify`` before comparison,
+    which -- for a string value -- sympifies it as an expression rather than
+    a bare numeral, so a symbolic ``value`` (e.g. a name or an expression
+    naming one) can also reference a given. Both fields are accounted for
+    here so a given that is only ever bounded by a constraint (spec-
+    sanctioned: constraints genuinely restrict sampling) is not mistaken for
+    unused.
+    """
+    names = set()
+    for c in constraints:
+        if not isinstance(c, dict):
+            continue
+        var = c.get("var")
+        if isinstance(var, str):
+            names.add(var)
+        value = c.get("value")
+        if isinstance(value, str):
+            try:
+                tree = ast.parse(value, mode="eval")
+            except SyntaxError:
+                continue
+            names.update(node.id for node in ast.walk(tree) if isinstance(node, ast.Name))
+    return names
+
+
+def _check_no_unused_given(equations, constraints, remaining_given_names):
+    """Reject a given that no emitted equation or constraint references.
 
     An unused given would otherwise pass compile + the full gate and ship as
     a red-herring fact in generated problems: the engine samples a value for
-    it, but no equation ever constrains it.
+    it, but nothing ever constrains it.
     """
-    referenced = _referenced_names(equations)
+    referenced = _referenced_names(equations) | _referenced_names_in_constraints(constraints)
     for name in sorted(remaining_given_names):
         if name not in referenced:
             raise SceneError(f"given {name!r} is declared but never used by any equation")

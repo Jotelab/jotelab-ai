@@ -507,6 +507,20 @@ def test_compile_unused_given_raises():
         compile_scene(scene)
 
 
+def test_compile_given_used_only_in_constraint_does_not_raise():
+    # Open 1 (re-review): a given referenced only via scene.constraints (not
+    # any equation) is spec-sanctioned -- constraints genuinely restrict
+    # sampling -- and must not be flagged as unused.
+    scene = _two_phase_ascent_scene()
+    scene["given"]["k"] = {
+        "unit": "m/s^2", "ranges": {"easy": [1, 5, False], "medium": [1, 5, False], "hard": [1, 5, False]},
+    }
+    scene["constraints"] = [{"var": "k", "op": ">", "value": 0}]
+    doc = compile_scene(scene)  # must not raise
+    assert "k" in doc["variables"]
+    assert {"var": "k", "op": ">", "value": 0} in doc["constraints"]
+
+
 def test_compile_non_identifier_given_name_raises():
     # Important 2: given names must be identifier-checked just like body and
     # sought names, or the compiler emits equations naming things it never
