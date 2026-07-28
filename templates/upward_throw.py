@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import sympy
 
+from .diagrams import motion_1d
 from .base import (Template, VarSpec, real_candidates, signed_smallest,
                    smallest_nonnegative, smallest_positive)
 
@@ -123,6 +124,25 @@ CONSTRAINTS = [_c_gravity_is_ten, _c_time_positive, _c_launch_upward,
                _c_height_above_launch, _c_within_flight]
 
 
+# -- the diagram payload --------------------------------------------------------
+def diagram_spec(ctx):
+    """Rise then fall on a vertical axis, with g acting downward throughout.
+
+    ``h`` is the height *at time t* (``h = u t − g t²/2``), i.e. the net rise
+    from the launch point to where the body is when the clock stops — not the
+    span of the upward leg — so it brackets the whole figure. ``t`` is likewise
+    the total elapsed time. The reversal is drawn because it is the physics: the
+    body is still moving up in segment 1 and already falling in segment 2.
+    """
+    return motion_1d(ctx, orientation="vertical", segments=[
+        {"velocity_in": u, "acceleration": g},
+        {"direction": "reverse", "velocity_out": v},
+    ], totals=[
+        {"symbol": h, "measures": "displacement"},
+        {"symbol": t, "measures": "duration"},
+    ])
+
+
 # -- the template object -------------------------------------------------------
 UPWARD_THROW = Template(
     topic="upward-throw",
@@ -134,4 +154,5 @@ UPWARD_THROW = Template(
     root_select=root_select,
     default_split=((u, g, t), v),
     signed_answer=True,  # v is negative while falling — the sign is direction
+    diagram_spec=diagram_spec,
 )

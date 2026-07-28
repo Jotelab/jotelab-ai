@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import sympy
 
+from .diagrams import motion_1d
 from .base import (Template, VarSpec, real_candidates, signed_smallest,
                    smallest_nonnegative)
 
@@ -88,6 +89,25 @@ def _c_distance_nonnegative(values, difficulty):
 CONSTRAINTS = [_c_distance_nonnegative]
 
 
+# -- the diagram payload --------------------------------------------------------
+def diagram_spec(ctx):
+    """Out along d1, back along d2 — the reversal is the whole point of the topic.
+
+    Both totals describe the round trip, but they are not the same measurement:
+    ``disp = d1 + d2`` is the net arrow from start to finish, while
+    ``dist = |d1| + |d2|`` is the length actually walked. Tagging them
+    ``displacement`` and ``path`` keeps the renderer from drawing one as the
+    other.
+    """
+    return motion_1d(ctx, segments=[
+        {"span": d1},
+        {"direction": "reverse", "span": d2},
+    ], totals=[
+        {"symbol": disp, "measures": "displacement"},
+        {"symbol": dist, "measures": "path"},
+    ])
+
+
 # -- the template object -------------------------------------------------------
 DISTANCE_DISPLACEMENT = Template(
     topic="distance-displacement",
@@ -99,4 +119,5 @@ DISTANCE_DISPLACEMENT = Template(
     root_select=root_select,
     default_split=((d1, d2), disp),
     signed_answer=True,  # displacement carries a sign (direction)
+    diagram_spec=diagram_spec,
 )

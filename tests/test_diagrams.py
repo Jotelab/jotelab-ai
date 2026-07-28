@@ -126,3 +126,51 @@ def test_actors_labels_each_body_velocity():
     assert spec["bodies"][0]["name"] == "A"
     assert spec["bodies"][0]["velocity"]["exact"] == "5"
     assert spec["bodies"][1]["velocity"]["role"] == "find"
+
+
+# --- totals: quantities that describe the whole drawn motion -----------------
+
+
+def test_motion_1d_omits_the_totals_key_when_there_are_none():
+    """Topics with nothing to bracket keep the payload they already had."""
+    spec = motion_1d(_ctx(), segments=[{"velocity_in": SUVAT.symbol("u")}])
+    assert "totals" not in spec
+
+
+def test_motion_1d_brackets_a_total_across_the_whole_figure():
+    """A whole-trip quantity is emitted once, beside the segments — not inside
+    one of them, which would claim it covers only that leg."""
+    ctx = _ctx(find_name="v")
+    spec = motion_1d(ctx, segments=[
+        {"velocity_in": SUVAT.symbol("u")},
+        {"duration": SUVAT.symbol("t")},
+    ], totals=[{"symbol": SUVAT.symbol("t"), "measures": "duration"}])
+    assert spec["totals"] == [{
+        "symbol": "t", "label": "t", "role": "given",
+        "value": 3, "exact": "3", "unit": "s", "measures": "duration",
+    }]
+
+
+def test_a_total_bound_to_the_find_hides_its_value_like_any_other_label():
+    ctx = _ctx(find_name="v")
+    spec = motion_1d(ctx, segments=[{}],
+                     totals=[{"symbol": SUVAT.symbol("v"), "measures": "displacement"}])
+    assert spec["totals"] == [{"symbol": "v", "label": "v", "role": "find",
+                               "measures": "displacement"}]
+    assert "value" not in spec["totals"][0]
+
+
+def test_a_total_absent_from_the_instance_is_dropped():
+    ctx = _ctx()
+    del ctx.values[SUVAT.symbol("a")]
+    spec = motion_1d(ctx, segments=[{}],
+                     totals=[{"symbol": SUVAT.symbol("a"), "measures": "displacement"}])
+    assert spec["totals"] == []
+
+
+def test_an_unknown_measures_value_is_rejected():
+    """The renderer switches on `measures`; a typo must not reach it."""
+    import pytest
+    with pytest.raises(ValueError, match="measures"):
+        motion_1d(_ctx(), segments=[{}],
+                  totals=[{"symbol": SUVAT.symbol("t"), "measures": "elapsed"}])

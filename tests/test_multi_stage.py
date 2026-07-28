@@ -111,3 +111,15 @@ def test_diagram_draws_the_two_phases_with_their_own_durations():
     assert segs[0]["duration"]["symbol"] == "t1"
     assert segs[1]["duration"]["symbol"] == "t2"
     assert "acceleration" not in segs[1]   # phase 2 is constant-velocity
+
+
+def test_diagram_brackets_total_displacement_across_both_phases():
+    """s spans both phases (s = u t1 + a t1²/2 + v t2), so attaching it to the
+    cruise segment would claim it covers that leg alone."""
+    data = generate("multi-stage-motion", given=("u", "a", "t1", "t2"), find="s",
+                    difficulty="easy", seed=6)
+    spec = data["diagram"]
+    assert all("span" not in s for s in spec["segments"])
+    total = spec["totals"][0]
+    assert total["symbol"] == "s" and total["measures"] == "displacement"
+    assert total["role"] == "find" and "value" not in total

@@ -91,10 +91,20 @@ CONSTRAINTS = [_c_time_positive, _c_speed_nonnegative]
 
 # -- the diagram payload --------------------------------------------------------
 def diagram_spec(ctx):
-    """Two sequential legs on one line; the rate label rides on the whole trip."""
+    """Two sequential legs on one line; the rate label rides on the whole trip.
+
+    ``t`` is the time for the *whole* trip (``sp = (|d1| + |d2|) / t``), and both
+    rates are defined over it, so all three are totals rather than segment-2
+    annotations. Only the rate this split actually involves survives — the other
+    is absent from ``values`` and is dropped by ``ctx.label``.
+    """
     return motion_1d(ctx, segments=[
         {"span": d1},
-        {"span": d2, "duration": t},
+        {"span": d2},
+    ], totals=[
+        {"symbol": t, "measures": "duration"},
+        {"symbol": sp, "measures": "rate"},
+        {"symbol": vavg, "measures": "rate"},
     ])
 
 

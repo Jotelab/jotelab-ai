@@ -6,11 +6,12 @@ Thai students and teachers. It replaces static drill sheets and removes the teac
 hand-building parallel problem sets.
 
 It uses a **neuro-symbolic** design: a constrained **symbolic engine (SymPy)** owns all computation,
-and a **fine-tuned LLM (Qwen 3.5)** owns only the natural-Thai phrasing and the TikZ diagram code —
+and a **fine-tuned LLM (Qwen 3.5)** owns only the natural-Thai phrasing —
 so the math is provably correct and the language is fluent.
 
 > **The invariant.** Every number a student sees comes from the symbolic engine. The LLM never
-> computes, alters, or "corrects" a value — it only phrases problems in Thai and draws figures.
+> computes, alters, or "corrects" a value — it only phrases problems in Thai. Figures are
+> engine-authored too (spec 2026-07-27): the model neither computes nor draws.
 > This is Jotelab's entire claim over generic AI; the **Data Fidelity** benchmark exists to police it.
 
 > **Invariant scope for user-authored templates (ADR-007).** For **built-in developer templates**
@@ -27,7 +28,7 @@ so the math is provably correct and the language is fluent.
 Frontend (Next.js / React)
   → API routes (Auth & Credits / Generation Engine orchestrator)
      1. SymPy engine        → samples numbers, reverse-engineers a clean answer, emits sympy_data
-     2. Qwen 3.5 + Zod      → phrases the problem in Thai + emits TikZ (never computes)
+     2. Qwen 3.5 + Zod      → phrases the problem in Thai (never computes, never draws)
      3. Supabase (Postgres) → persists worksheets/questions, manages credits
   → A4 Canvas (KaTeX + TikZ) → live preview + vector PDF export
 ```
@@ -44,7 +45,7 @@ rendered.
 | Backend / data | Supabase (PostgreSQL, Auth, Google OAuth) |
 | AI integration | Vercel AI SDK & Gateway, `generateObject()` + Zod structured output |
 | Symbolic engine | **SymPy** (Python) — constrained engine with a constraint-based re-roll loop |
-| Language model | **Qwen 3.5**, LoRA fine-tuned — Thai phrasing + TikZ, no computation |
+| Language model | **Qwen 3.5**, LoRA fine-tuned — Thai phrasing only; no computation, no diagrams |
 | Rendering | KaTeX (math), TikZjax (diagrams), CSS print media queries (A4 / PDF) |
 
 Languages: **TypeScript** for the app, **Python** for the symbolic engine and model fine-tuning.
@@ -52,7 +53,8 @@ Languages: **TypeScript** for the app, **Python** for the symbolic engine and mo
 ## The four subsystems
 
 1. **Batch Generation Engine** — Basic mode (random by topic/grade) and Advanced mode (user pins
-   Given variables, the Find target, and numeric conditions), plus auto-generated TikZ figures.
+   Given variables, the Find target, and numeric conditions), plus engine-authored TikZ figures
+   serialized from `sympy_data["diagram"]` (spec 2026-07-27) — the model never draws.
 2. **Interactive A4 Canvas** — live A4 preview, KaTeX/TikZ rendering, per-question micro-editing
    (regenerate / re-roll numbers / toggle the step-by-step solution).
 3. **Personal Library & Export** — Google OAuth sign-in, cloud-saved worksheet history, vector PDF export.
@@ -113,6 +115,49 @@ Validate a template document from the command line:
 
 ```bash
 python -m templates.declarative templates/data/suvat.json   # per-stage PASS/FAIL report; exit 0 on all-pass
+```
+
+## Engine-owned diagrams (spec 2026-07-27)
+
+Figures used to be the LLM's job. They are not any more: the engine emits a
+JSON-able **diagram payload** at `sympy_data["diagram"]`, and the web app
+serializes that payload to TikZ without deriving or deciding anything beyond
+obeying each element's `role`. A model that cannot draw cannot draw a wrong
+number.
+
+A template declares an optional `diagram_spec` hook (superseding the former
+`graph_spec`) and builds its payload with a shared builder from
+[`templates/diagrams.py`](templates/diagrams.py):
+
+- **`motion_1d`** — an oriented axis with *ordered* segments. Order matters
+  because `upward-throw` (up then down) and `distance-displacement` (out then
+  back) reverse direction mid-problem. Alongside the segments it carries
+  **totals**: quantities describing the motion as a whole, each tagged with what
+  it measures (`displacement` — the net start-to-finish arrow, `path` — the
+  length actually walked, `duration`, `rate`). A whole-trip value attached to a
+  single leg would draw a bracket claiming it covers only that leg.
+- **`plot_2d`** — labelled axes plus a polyline, for `motion-graphs`.
+- **`actors`** — named bodies with velocity arrows, for `relative-velocity`.
+
+**The answer is never on the wire.** `DiagramContext.label` emits an element
+bound to the find symbol *without* `value` or `exact`, so there is nothing for a
+downstream bug to leak. The one deliberate exception is `plot-2d`: graph-reading
+splits ask the student to derive the slope or area *from the figure*, so the
+polyline ships — what never ships is an annotation naming the find's value.
+Elements whose symbol is absent from the instance are dropped, so a figure draws
+only what its split actually involves.
+
+How to test:
+
+```bash
+# the builders, the payload contract, and the cross-topic invariant sweep
+pytest tests/test_diagrams.py tests/test_diagram_contract.py tests/test_diagram_invariants.py -q
+
+# see a real payload: the diagram travels inside sympy_data
+python -m engine --topic upward-throw --given u,g,t --find v --json | python -m json.tool
+
+# the sweep on its own — every topic, every split, the answer never on the wire
+pytest tests/test_diagram_invariants.py -q
 ```
 
 ## Scene topics (Andes-lite milestone 1)

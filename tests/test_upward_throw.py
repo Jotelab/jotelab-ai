@@ -114,3 +114,26 @@ def test_exactly_five_valid_splits():
 
 def test_registered_and_loadable():
     assert "upward-throw" in registry.topics()
+
+
+def test_diagram_is_vertical_with_an_up_then_down_reversal():
+    """The projectile rises, then falls: two segments, opposite directions."""
+    data = generate("upward-throw", given=("u", "g", "t"), find="v",
+                    difficulty="easy", seed=8)
+    spec = data["diagram"]
+    assert spec["orientation"] == "vertical"
+    assert [s["direction"] for s in spec["segments"]] == ["forward", "reverse"]
+    assert spec["segments"][0]["velocity_in"]["symbol"] == "u"
+    assert spec["segments"][1]["velocity_out"]["role"] == "find"
+
+
+def test_diagram_brackets_height_and_time_across_the_whole_flight():
+    """h is the height at time t, not the span of the rise, so it is a total."""
+    data = generate("upward-throw", given=("u", "g", "t"), find="h",
+                    difficulty="easy", seed=8)
+    totals = {t["symbol"]: t for t in data["diagram"]["totals"]}
+    assert totals["h"]["measures"] == "displacement"
+    assert totals["h"]["role"] == "find" and "value" not in totals["h"]
+    assert totals["t"]["measures"] == "duration"
+    for seg in data["diagram"]["segments"]:
+        assert "span" not in seg and "duration" not in seg

@@ -129,11 +129,18 @@ CONSTRAINTS = [_c_times_positive, _c_start_nonneg, _c_cruise_forward,
 
 # -- the diagram payload --------------------------------------------------------
 def diagram_spec(ctx):
-    """Phase 1 accelerates from u to the cruise velocity; phase 2 holds it."""
+    """Phase 1 accelerates from u to the cruise velocity; phase 2 holds it.
+
+    ``s`` is the displacement across *both* phases
+    (``s = u t1 + a t1²/2 + v t2``), so it brackets the whole figure instead of
+    riding on phase 2, which would claim it covers the cruise leg alone.
+    """
     return motion_1d(ctx, segments=[
         {"velocity_in": u, "acceleration": a, "velocity_out": v,
          "duration": t1},
-        {"velocity_in": v, "duration": t2, "span": s},
+        {"velocity_in": v, "duration": t2},
+    ], totals=[
+        {"symbol": s, "measures": "displacement"},
     ])
 
 

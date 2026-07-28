@@ -89,3 +89,36 @@ def test_only_two_valid_splits():
 def test_registered_and_loadable():
     assert "distance-displacement" in registry.topics()
     assert registry.load_template("distance-displacement").topic == "distance-displacement"
+
+
+def test_diagram_draws_the_out_and_back_legs():
+    """d1 out, d2 back: the reversal is exactly what makes distance differ
+    from displacement, so the figure must show it."""
+    data = generate("distance-displacement", given=("d1", "d2"), find="disp",
+                    difficulty="easy", seed=9)
+    segs = data["diagram"]["segments"]
+    assert [s["direction"] for s in segs] == ["forward", "reverse"]
+    assert segs[0]["span"]["symbol"] == "d1"
+    assert segs[1]["span"]["symbol"] == "d2"
+
+
+def test_diagram_distinguishes_net_displacement_from_path_length():
+    """disp is the start-to-finish arrow; dist is the length walked. Drawing
+    one as the other is the mislabel this role exists to prevent.
+
+    Each split draws only its own quantity: asking for disp leaves dist out of
+    the instance entirely, so it is dropped rather than drawn unlabelled.
+    """
+    net = generate("distance-displacement", given=("d1", "d2"), find="disp",
+                   difficulty="easy", seed=9)
+    totals = {t["symbol"]: t for t in net["diagram"]["totals"]}
+    assert totals["disp"]["measures"] == "displacement"
+    assert totals["disp"]["role"] == "find" and "value" not in totals["disp"]
+    assert "dist" not in totals
+
+    walked = generate("distance-displacement", given=("d1", "d2"), find="dist",
+                      difficulty="easy", seed=9)
+    totals = {t["symbol"]: t for t in walked["diagram"]["totals"]}
+    assert totals["dist"]["measures"] == "path"
+    assert totals["dist"]["role"] == "find" and "value" not in totals["dist"]
+    assert "disp" not in totals

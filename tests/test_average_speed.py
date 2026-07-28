@@ -97,3 +97,17 @@ def test_diagram_draws_both_legs():
     assert segs[0]["span"]["symbol"] == "d1"
     assert segs[1]["span"]["symbol"] == "d2"
     assert all(s["direction"] == "forward" for s in segs)
+
+
+def test_diagram_brackets_the_trip_time_and_rate_rather_than_leg_two():
+    """t is the whole trip's time (sp = (|d1| + |d2|) / t), so it must not be
+    drawn as segment 2's duration — and the rate rides on the trip too."""
+    data = generate("average-speed", given=("d1", "d2", "t"), find="vavg",
+                    difficulty="easy", seed=6)
+    spec = data["diagram"]
+    assert all("duration" not in s for s in spec["segments"])
+    totals = {t["symbol"]: t for t in spec["totals"]}
+    assert totals["t"]["measures"] == "duration"
+    assert totals["vavg"]["measures"] == "rate"
+    assert totals["vavg"]["role"] == "find" and "value" not in totals["vavg"]
+    assert "sp" not in totals  # absent from this split, so not drawn

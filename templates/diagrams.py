@@ -12,7 +12,22 @@ else.** An element bound to the find symbol is emitted without ``value`` or
 
 from __future__ import annotations
 
-from engine.contract import to_display, to_exact
+
+def _numeric_forms():
+    """``(to_display, to_exact)``, imported on use rather than at module scope.
+
+    ``engine/__init__`` imports the loop, which imports the registry, which
+    imports the code templates — and those import this module. A module-scope
+    ``from engine.contract import …`` therefore re-enters this module while it
+    is still initializing whenever ``templates.diagrams`` is the first thing
+    imported (e.g. ``pytest tests/test_diagrams.py`` on its own), and fails.
+    Deferring closes the cycle, mirroring the import of ``DiagramContext``
+    inside ``engine.contract.build_sympy_data``.
+    """
+    from engine.contract import to_display, to_exact
+
+    return to_display, to_exact
+
 
 # Engine symbol name -> the TeX math label drawn in the figure. Math and Latin
 # only: node-tikzjax embeds Computer Modern, and Thai would fail to compile.
@@ -54,6 +69,7 @@ class DiagramContext:
             return out
         if sym not in self.values:
             return None
+        to_display, to_exact = _numeric_forms()
         out["role"] = "given" if sym in self.given else "derived"
         out["value"] = to_display(self.values[sym])
         out["exact"] = to_exact(self.values[sym])
@@ -63,15 +79,32 @@ class DiagramContext:
 
 SEGMENT_ROLES = ("velocity_in", "acceleration", "velocity_out", "span", "duration")
 
+# What a whole-figure quantity actually measures. The renderer draws each kind
+# differently, so the distinction has to survive into the payload:
+#   displacement — start of the first segment to the end of the last (a net,
+#                  which for a there-and-back motion is NOT the path length)
+#   path         — the summed length of every leg, ignoring direction
+#   duration     — elapsed time across all segments
+#   rate         — a quantity defined over the whole trip (an average speed)
+TOTAL_MEASURES = ("displacement", "path", "duration", "rate")
 
-def motion_1d(ctx, *, orientation="horizontal", segments):
-    """A 1-D motion figure: an oriented axis plus ordered segments.
+
+def motion_1d(ctx, *, orientation="horizontal", segments, totals=()):
+    """A 1-D motion figure: an oriented axis, ordered segments, whole-trip totals.
 
     Segments are ordered because ``upward-throw`` (up then down) and
     ``distance-displacement`` (out then back) reverse direction mid-problem;
     a flat element bag cannot express that. Roles whose symbol is absent from
     this instance are dropped, so the figure is variable-consistent — it draws
     only what the problem actually involves.
+
+    ``totals`` carries the quantities that describe the motion *as a whole* —
+    total elapsed time, net displacement, path length, an average rate. They
+    are emitted beside the segments rather than inside one of them: attaching a
+    whole-trip value to a single leg (the pre-2026-07-29 behaviour for
+    ``average-speed``'s ``t`` and ``multi-stage-motion``'s ``s``) draws a
+    bracket that claims the value covers only that leg, which is false. Each
+    entry is ``{"symbol": Symbol, "measures": <one of TOTAL_MEASURES>}``.
     """
     built = []
     for seg in segments:
@@ -81,7 +114,22 @@ def motion_1d(ctx, *, orientation="horizontal", segments):
             if label is not None:
                 out[role] = label
         built.append(out)
-    return {"kind": "motion-1d", "orientation": orientation, "segments": built}
+    spec = {"kind": "motion-1d", "orientation": orientation, "segments": built}
+
+    built_totals = []
+    for total in totals:
+        measures = total["measures"]
+        if measures not in TOTAL_MEASURES:
+            raise ValueError(
+                f"unknown measures {measures!r}; expected one of {TOTAL_MEASURES}"
+            )
+        label = ctx.label(total["symbol"])
+        if label is None:
+            continue
+        built_totals.append({**label, "measures": measures})
+    if totals:
+        spec["totals"] = built_totals
+    return spec
 
 
 def plot_2d(ctx, *, axes, points):
@@ -94,6 +142,7 @@ def plot_2d(ctx, *, axes, points):
     every point ships; what never ships is an *annotation* naming the find's
     value (no ``$a = 2$`` slope caption, no labelled shaded area).
     """
+    to_display, to_exact = _numeric_forms()
     return {
         "kind": "plot-2d",
         "axes": axes,
