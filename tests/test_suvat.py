@@ -97,3 +97,16 @@ def test_root_selection_smallest_positive():
     value, _, aux_values = _solve(eq, t, inputs, tpl, "easy")
     assert value == 3
     assert aux_values == {}  # single-equation path emits empty dict
+
+
+def test_diagram_is_variable_consistent_and_hides_the_answer():
+    """The figure draws the split's own quantities, and never the answer."""
+    data = generate("suvat", given=("u", "a", "t"), find="v",
+                    difficulty="easy", seed=7)
+    seg = data["diagram"]["segments"][0]
+    assert data["diagram"]["kind"] == "motion-1d"
+    assert data["diagram"]["orientation"] == "horizontal"
+    assert seg["velocity_in"]["role"] == "given"
+    assert seg["velocity_out"] == {"symbol": "v", "label": "v", "role": "find"}
+    assert "span" not in seg          # s is not in this split
+    assert seg["duration"]["unit"] == "s"

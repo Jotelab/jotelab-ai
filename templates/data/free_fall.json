@@ -24,6 +24,14 @@
     {"var": "v", "op": "abs<=", "value": 200}
   ],
   "default_split": {"given": ["u", "g", "t"], "find": "v"},
+  "diagram": {
+    "kind": "motion-1d",
+    "orientation": "vertical",
+    "segments": [
+      {"direction": "forward", "velocity_in": "u", "acceleration": "g",
+       "velocity_out": "v", "span": "h", "duration": "t"}
+    ]
+  },
   "golden_cases": [
     {"given": {"u": 0, "g": 10, "t": 3}, "find": "v", "difficulty": "easy", "expected": "30"},
     {"given": {"u": 5, "g": 10, "t": 2}, "find": "h", "difficulty": "easy", "expected": "30"}

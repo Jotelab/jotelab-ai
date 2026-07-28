@@ -16,6 +16,10 @@
   ],
   "signed_answer": true,
   "default_split": {"given": ["va", "vb"], "find": "vab"},
+  "diagram": {
+    "kind": "actors",
+    "bodies": [{"name": "A", "velocity": "va"}, {"name": "B", "velocity": "vb"}]
+  },
   "golden_cases": [
     {"given": {"va": 20, "vb": 12}, "find": "vab", "difficulty": "easy", "expected": "8"},
     {"given": {"va": -10, "vb": 5}, "find": "vab", "difficulty": "easy", "expected": "-15"}

@@ -52,7 +52,9 @@ class Template:
     root_select: Callable  # (values: list, find, difficulty) -> chosen value | None
     default_split: tuple  # (given_symbols, find_symbol) for Basic mode
     signed_answer: bool = False  # vector/direction topics: allow a negative answer
-    graph_spec: Callable = None  # optional: values -> JSON-able graph payload ("graph" key)
+    # values -> JSON-able diagram payload ("diagram" key). Supersedes the former
+    # graph_spec hook: the engine owns every glyph in a figure (spec 2026-07-27).
+    diagram_spec: Callable = None
     auxiliaries: dict = None  # system templates: Symbol -> unit str (spec 2026-07-27)
 
     # -- convenience accessors -------------------------------------------------

@@ -100,3 +100,14 @@ def test_exactly_four_valid_splits():
 
 def test_registered_and_loadable():
     assert "multi-stage-motion" in registry.topics()
+
+
+def test_diagram_draws_the_two_phases_with_their_own_durations():
+    data = generate("multi-stage-motion", given=("u", "a", "t1", "t2"), find="s",
+                    difficulty="easy", seed=6)
+    segs = data["diagram"]["segments"]
+    assert len(segs) == 2
+    assert segs[0]["acceleration"]["symbol"] == "a"
+    assert segs[0]["duration"]["symbol"] == "t1"
+    assert segs[1]["duration"]["symbol"] == "t2"
+    assert "acceleration" not in segs[1]   # phase 2 is constant-velocity

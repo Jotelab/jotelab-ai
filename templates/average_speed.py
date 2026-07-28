@@ -18,6 +18,7 @@ import sympy
 
 from .base import (Template, VarSpec, real_candidates, signed_smallest,
                    smallest_nonnegative)
+from .diagrams import motion_1d
 
 # -- symbols -------------------------------------------------------------------
 d1, d2, t, sp, vavg = sympy.symbols("d1 d2 t sp vavg", real=True)
@@ -88,6 +89,15 @@ def _c_speed_nonnegative(values, difficulty):
 CONSTRAINTS = [_c_time_positive, _c_speed_nonnegative]
 
 
+# -- the diagram payload --------------------------------------------------------
+def diagram_spec(ctx):
+    """Two sequential legs on one line; the rate label rides on the whole trip."""
+    return motion_1d(ctx, segments=[
+        {"span": d1},
+        {"span": d2, "duration": t},
+    ])
+
+
 # -- the template object -------------------------------------------------------
 AVERAGE_SPEED = Template(
     topic="average-speed",
@@ -99,4 +109,5 @@ AVERAGE_SPEED = Template(
     root_select=root_select,
     default_split=((d1, d2, t), sp),
     signed_answer=True,  # average velocity carries a sign (direction)
+    diagram_spec=diagram_spec,
 )

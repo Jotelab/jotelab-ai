@@ -95,3 +95,14 @@ def test_register_declarative_registers_on_pass_and_raises_on_fail():
         register_declarative(bad)
     assert ei.value.stage == 2
     assert "suvat_bad" not in registry.topics()
+
+
+def test_gate_rejects_a_diagram_naming_an_undeclared_variable():
+    """A typo in a declarative diagram must fail the gate, not ship silently."""
+    from templates.declarative.parse import parse_template
+
+    free_fall_json = Path(__file__).resolve().parents[1] / "templates" / "data" / "free_fall.json"
+    doc = json.loads(free_fall_json.read_text())
+    doc["diagram"]["segments"][0]["velocity_in"] = "nope"
+    with pytest.raises(TemplateValidationError, match="undeclared variable"):
+        parse_template(doc)
