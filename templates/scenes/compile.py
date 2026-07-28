@@ -93,7 +93,7 @@ def compile_scene(scene: dict) -> dict:
     if quantity == "total_displacement":
         find_name = sought["name"]
         _check_sought_name_collision(find_name, remaining_given_names, aux)
-        body = bodies_by_name[sought["body"]]
+        body = _lookup_body(bodies_by_name, sought["body"])
         n = len(body["phases"])
         terms = " + ".join(displacement_name(body["name"], j) for j in range(1, n + 1))
         equations.append(f"Eq({find_name}, {terms})")
@@ -107,7 +107,7 @@ def compile_scene(scene: dict) -> dict:
         find_ranges = sought["ranges"]
 
     elif quantity == "phase_field":
-        body = bodies_by_name[sought["body"]]
+        body = _lookup_body(bodies_by_name, sought["body"])
         phase_idx = sought["phase"]
         field = sought["field"]
         if field not in _PHASE_FIELD_FIELDS:
@@ -238,6 +238,13 @@ def _validate_sought_structure(sought, given_names):
         raise SceneError("sought.quantity 'phase_field' requires 'phase' and 'field'")
 
 
+def _lookup_body(bodies_by_name, body_name):
+    body = bodies_by_name.get(body_name)
+    if body is None:
+        raise SceneError(f"sought.body {body_name!r} is not a declared body")
+    return body
+
+
 def _check_sought_name_collision(name, given_names, aux):
     if name in given_names:
         raise SceneError(f"sought name {name!r} collides with a given name")
@@ -349,10 +356,27 @@ def _compile_body(body, given_names, duration_override):
             if not isinstance(end_condition, dict) or "v" not in end_condition:
                 raise SceneError(f"body {name!r} phase {i}: end_condition must be {{'v': <number>}}")
             k = end_condition["v"]
+            _validate_declared_ref(k, given_names, f"body {name!r} phase {i} end_condition.v")
+            if not isinstance(k, (int, float)) or isinstance(k, bool):
+                raise SceneError(
+                    f"body {name!r} phase {i}: end_condition.v must be a number, got {k!r}"
+                )
+            if k != 0:
+                # See module docstring: nonzero end-velocity targets leave a bare,
+                # dimensionless residual literal in the derived-duration equation below
+                # and would legitimately fail the frozen dimensional-homogeneity gate
+                # downstream. Reject here rather than let the compiler emit a doc that
+                # only fails several stages later, naming an equation the scene author
+                # never wrote.
+                raise SceneError(
+                    f"body {name!r} phase {i}: end_condition.v={k!r} is unsupported in "
+                    "v1 (only v == 0 boundary conditions are supported; nonzero targets "
+                    "require a pinned-constant given, not yet implemented)"
+                )
             k_str = render(k, given_names)
-            # See module docstring: this derives the auto duration from the boundary
-            # condition rather than literally pinning vend_b_i to k (which cannot pass
-            # the frozen dimensional-homogeneity gate for a bare numeral).
+            # This derives the auto duration from the boundary condition rather than
+            # literally pinning vend_b_i to k (which cannot pass the frozen dimensional-
+            # homogeneity gate for a bare numeral -- see module docstring).
             equations.append(f"Eq({duration_sym}, ({k_str} - {u_expr})/{a_expr})")
 
     return equations, aux
@@ -368,9 +392,7 @@ def _duration_override_for_sought(sought, bodies_by_name):
         return {}
     body_name = sought.get("body")
     phase_idx = sought.get("phase")
-    body = bodies_by_name.get(body_name)
-    if body is None:
-        raise SceneError(f"sought.body {body_name!r} is not a declared body")
+    body = _lookup_body(bodies_by_name, body_name)
     phases = body["phases"]
     if not isinstance(phase_idx, int) or not (1 <= phase_idx <= len(phases)):
         raise SceneError(f"sought.phase {phase_idx!r} is out of range for body {body_name!r}")

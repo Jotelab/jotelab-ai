@@ -322,6 +322,55 @@ def test_compile_unknown_event_kind_raises():
         compile_scene(scene)
 
 
+# --- fix-report regression tests (task review findings) --------------------
+
+
+def test_compile_nonzero_end_condition_raises():
+    # Critical 1: a nonzero end_condition.v leaves a bare residual literal that
+    # would fail the frozen dimensional-homogeneity gate several stages later,
+    # naming an equation the scene author never wrote. The compiler must reject
+    # this itself, loudly, at compile time.
+    scene = _two_phase_ascent_scene()
+    scene["bodies"][0]["phases"][1]["end_condition"] = {"v": 5}
+    with pytest.raises(SceneError, match="unsupported in v1"):
+        compile_scene(scene)
+
+
+def test_compile_undeclared_sought_body_raises_scene_error_total_displacement():
+    # Important 2: a typo'd sought.body must raise SceneError, not KeyError.
+    scene = _two_phase_ascent_scene()
+    scene["sought"]["body"] = "not-a-body"
+    with pytest.raises(SceneError, match="not a declared body"):
+        compile_scene(scene)
+
+
+def test_compile_undeclared_sought_body_raises_scene_error_phase_field():
+    scene = _two_phase_ascent_scene()
+    scene["sought"] = {
+        "quantity": "phase_field", "body": "not-a-body", "phase": 1, "field": "a",
+        "name": "a", "unit": "m/s^2",
+        "ranges": {"easy": [2, 10, False], "medium": [2, 15, False], "hard": [2, 20, False]},
+    }
+    with pytest.raises(SceneError, match="not a declared body"):
+        compile_scene(scene)
+
+
+def test_compile_end_condition_neg_prefixed_undeclared_name_raises():
+    # Minor 3: end_condition.v should go through the same neg:-target declared-name
+    # check as every other phase field, not silently reach render()/downstream.
+    scene = _two_phase_ascent_scene()
+    scene["bodies"][0]["phases"][1]["end_condition"] = {"v": "neg:zzz"}
+    with pytest.raises(SceneError, match="not a declared given"):
+        compile_scene(scene)
+
+
+def test_compile_end_condition_non_numeric_raises():
+    scene = _two_phase_ascent_scene()
+    scene["bodies"][0]["phases"][1]["end_condition"] = {"v": "banana"}
+    with pytest.raises(SceneError, match="must be a number"):
+        compile_scene(scene)
+
+
 def test_compile_meet_event_two_car_style():
     # Two bodies, one phase each (v1's allowed shape), sought = duration_of_phase
     # via the shared t_1 auxiliary the meet event's equations pin down.
