@@ -1,0 +1,26 @@
+{
+  "topic": "two-phase-ascent",
+  "bodies": [
+    {
+      "name": "rocket",
+      "phases": [
+        {"kind": "constant-acceleration", "u": 0, "a": "a", "duration": "t1"},
+        {"kind": "constant-acceleration", "u": "auto", "a": "neg:g",
+         "duration": "auto", "end_condition": {"v": 0}}
+      ]
+    }
+  ],
+  "given": {
+    "a":  {"unit": "m/s^2", "ranges": {"easy": [2, 10, false], "medium": [2, 15, false], "hard": [2, 20, false]}},
+    "t1": {"unit": "s",     "ranges": {"easy": [2, 10, false], "medium": [2, 15, false], "hard": [2, 20, false]}},
+    "g":  {"unit": "m/s^2", "ranges": {"easy": [10, 10, false], "medium": [10, 10, false], "hard": [10, 10, false]}}
+  },
+  "sought": {"quantity": "total_displacement", "body": "rocket", "name": "H",
+             "unit": "m", "ranges": {"easy": [1, 2000, false], "medium": [1, 4000, false], "hard": [1, 8000, false]}},
+  "events": [],
+  "constraints": [],
+  "golden_cases": [
+    {"given": {"a": 8, "t1": 10, "g": 10}, "difficulty": "easy", "expected": "720"}
+  ],
+  "trust_state": "unverified"
+}

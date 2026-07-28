@@ -5,13 +5,15 @@ Also covers Task 2 (principle KB, per-phase equation emission) and Task 3
 
 import copy
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 import sympy
 
 from engine.loop import generate
-from engine.registry import load_template, temporary
+from engine.registry import load_template, temporary, topics
 from harness.verify import verify_generic
 from templates.declarative.gate import validate_template
 from templates.declarative.parse import parse_template
@@ -456,3 +458,35 @@ def test_pursuit_scene_behaviorally_identical_to_hand_written_pursuit():
         compiled_aux_by_symbol[MEET_NAME]["exact"]
         == hand_written_aux_by_symbol["x"]["exact"]
     )
+
+
+# --- Task 5: two-phase-ascent registered as a live engine topic ------------
+
+
+def test_two_phase_ascent_registered_topic():
+    assert "two-phase-ascent" in topics()
+
+
+def test_two_phase_ascent_generates_exact_and_verifies():
+    tpl = load_template("two-phase-ascent")
+    data = generate(
+        "two-phase-ascent", given=["a", "t1", "g"], find="H",
+        conditions={"a": 8, "t1": 10, "g": 10}, difficulty="easy", seed=1,
+    )
+    assert data["find"]["exact"] == "720"
+    assert verify_generic(data, tpl, difficulty="easy") is True
+
+
+def test_two_phase_ascent_cli_verify_smoke():
+    root = Path(__file__).resolve().parents[1]
+    venv_python = root / ".venv" / "bin" / "python"
+    exe = str(venv_python) if venv_python.exists() else sys.executable
+    result = subprocess.run(
+        [exe, "-m", "engine", "--topic", "two-phase-ascent",
+         "--given", "a,t1,g", "--find", "H",
+         "--condition", "a=8", "--condition", "t1=10", "--condition", "g=10",
+         "--verify"],
+        cwd=root, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "PASS" in result.stdout

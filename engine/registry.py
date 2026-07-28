@@ -82,6 +82,13 @@ _DECLARATIVE_TOPICS = ("vectors_1d.json", "free_fall.json",
                        "relative_velocity.json", "pursuit.json")
 _declarative_loaded = False
 
+# Topics authored as scene documents in ``templates/scenes/data/`` and compiled
+# to a template doc via ``templates.scenes.compile_scene`` before parsing (the
+# scene compiler, spec 2026-07-29). ``pursuit_scene.json`` also lives in that
+# directory but stays a test fixture only — the hand-written ``pursuit``
+# declarative topic above already owns that topic name.
+_SCENE_TOPICS = ("two_phase_ascent.json",)
+
 
 def _ensure_declarative_loaded() -> None:
     """Parse and register the declarative JSON topics on first lookup.
@@ -108,4 +115,12 @@ def _ensure_declarative_loaded() -> None:
     data_dir = Path(__file__).resolve().parents[1] / "templates" / "data"
     for filename in _DECLARATIVE_TOPICS:
         template = parse_template(json.loads((data_dir / filename).read_text()))
+        _REGISTRY.setdefault(template.topic, template)
+
+    from templates.scenes import compile_scene
+
+    scenes_dir = Path(__file__).resolve().parents[1] / "templates" / "scenes" / "data"
+    for filename in _SCENE_TOPICS:
+        scene = json.loads((scenes_dir / filename).read_text())
+        template = parse_template(compile_scene(scene))
         _REGISTRY.setdefault(template.topic, template)
