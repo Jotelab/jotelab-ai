@@ -9,7 +9,15 @@ from engine.loop import generate
 
 
 def test_topics_without_hook_emit_no_diagram_key():
-    data = generate("average-speed", difficulty="easy", seed=3)
+    """A template with no diagram_spec emits no "diagram" key at all.
+
+    Constructed rather than naming a real topic: by the end of this plan every
+    registered topic has a hook, so any named example would go stale.
+    """
+    base = registry.load_template("suvat")
+    hookless = dataclasses.replace(base, diagram_spec=None)
+    with registry.temporary(hookless):
+        data = generate("suvat", difficulty="easy", seed=3)
     assert "diagram" not in data
 
 
