@@ -189,7 +189,7 @@ python -c "import json; from templates.scenes import compile_scene; from templat
 <package-manager> run dev
 
 # symbolic engine + tests (Python)
-pytest                 # unit + property tests (156 green: engine, harness, declarative gate, parity, topics, chains)
+pytest                 # unit + property tests (265 green: engine, harness, declarative gate, parity, topics, chains)
 
 # generate one fully-solved problem — a random topic each run (pin with --topic)
 python -m engine --difficulty easy --verify

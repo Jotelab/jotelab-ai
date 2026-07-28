@@ -1,7 +1,8 @@
 """Scene compiler ontology (spec 2026-07-29, Task 1): names, units, rendering.
 
-Also covers Task 2 (principle KB, per-phase equation emission) and Task 3
-(the compiler: scene -> system-template doc)."""
+Also covers Task 2 (principle KB, per-phase equation emission), Task 3 (the
+compiler: scene -> system-template doc), Task 4 (pursuit re-derived from a
+scene), and Task 5 (two-phase-ascent registered as a live engine topic)."""
 
 import copy
 import json
@@ -490,3 +491,66 @@ def test_two_phase_ascent_cli_verify_smoke():
     )
     assert result.returncode == 0, result.stderr + result.stdout
     assert "PASS" in result.stdout
+
+
+# --- final-review hardening (unused-given and given-name validation) -------
+
+
+def test_compile_unused_given_raises():
+    # Important 1: a given no equation references must not silently ship as
+    # a red-herring fact in generated problems.
+    scene = _two_phase_ascent_scene()
+    scene["given"]["zzz"] = {
+        "unit": "m", "ranges": {"easy": [1, 10, False], "medium": [1, 10, False], "hard": [1, 10, False]},
+    }
+    with pytest.raises(SceneError, match="zzz.*declared but never used"):
+        compile_scene(scene)
+
+
+def test_compile_non_identifier_given_name_raises():
+    # Important 2: given names must be identifier-checked just like body and
+    # sought names, or the compiler emits equations naming things it never
+    # declared.
+    scene = _two_phase_ascent_scene()
+    scene["given"]["a*g"] = {
+        "unit": "m", "ranges": {"easy": [1, 10, False], "medium": [1, 10, False], "hard": [1, 10, False]},
+    }
+    with pytest.raises(SceneError, match="valid Python identifier"):
+        compile_scene(scene)
+
+
+def test_compile_reserved_given_name_raises():
+    # Important 2: parser-reserved names are valid identifiers but produce
+    # cryptic downstream failures if used as a given name.
+    scene = _two_phase_ascent_scene()
+    scene["given"]["Eq"] = {
+        "unit": "m", "ranges": {"easy": [1, 10, False], "medium": [1, 10, False], "hard": [1, 10, False]},
+    }
+    with pytest.raises(SceneError, match="reserved"):
+        compile_scene(scene)
+
+
+def test_compile_meet_event_same_body_twice_raises():
+    # Minor 3: a meet event listing the same body twice must be rejected at
+    # compile time rather than failing obscurely at gate stage 3.
+    scene = {
+        "topic": "two-car-meet-scene",
+        "bodies": [
+            {"name": "carA", "phases": [
+                {"kind": "constant-velocity", "v": "va", "duration": "auto"},
+            ]},
+        ],
+        "given": {
+            "va": {"unit": "m/s", "ranges": {"easy": [6, 20, False], "medium": [6, 30, False], "hard": [6, 40, False]}},
+            "gap": {"unit": "m", "ranges": {"easy": [0, 10, False], "medium": [0, 30, False], "hard": [0, 60, False]}},
+        },
+        "sought": {"quantity": "duration_of_phase", "body": "carA", "phase": 1, "name": "t",
+                   "unit": "s", "ranges": {"easy": [1, 10, False], "medium": [1, 20, False], "hard": [1, 30, False]}},
+        "events": [{"kind": "meet", "bodies": ["carA", "carA"],
+                    "head_start": {"body": "carA", "given": "gap"}, "at_end_of_phase": 1}],
+        "constraints": [],
+        "golden_cases": [],
+        "trust_state": "unverified",
+    }
+    with pytest.raises(SceneError, match="distinct"):
+        compile_scene(scene)

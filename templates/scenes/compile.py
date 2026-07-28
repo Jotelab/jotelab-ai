@@ -4,9 +4,9 @@
 walking through phases, an optional meet event, a sought quantity) and
 compiles it into the exact declarative doc shape ``templates.declarative.parse
 .parse_template`` accepts and ``templates.declarative.gate.validate_template``
-gates. See the scene-compiler plan (docs/.superpowers/sdd/2026-07-29-scene-
-compiler) for the full scene format; this module implements its six-step
-algorithm:
+gates. See the scene-compiler plan
+(docs/superpowers/plans/2026-07-29-scene-compiler.md) for the full scene
+format; this module implements its six-step algorithm:
 
 1. Validate the scene's structure (closed top-level key set, unique body
    names, known phase kinds, declared given references, a sought name that
@@ -40,6 +40,8 @@ givens through for nonzero targets.
 
 from __future__ import annotations
 
+import ast
+
 from .kb import phase_equations
 from .ontology import (
     MEET_NAME,
@@ -58,6 +60,7 @@ _TOP_LEVEL_KEYS = {
 _PHASE_KINDS = {"constant-velocity", "constant-acceleration"}
 _SOUGHT_QUANTITIES = {"total_displacement", "duration_of_phase", "phase_field"}
 _PHASE_FIELD_FIELDS = {"a", "v", "u"}
+_RESERVED_GIVEN_NAMES = {"Eq", "sqrt", "Rational"}
 
 
 def compile_scene(scene: dict) -> dict:
@@ -165,6 +168,7 @@ def compile_scene(scene: dict) -> dict:
     }
 
     _check_determinism(equations, aux)
+    _check_no_unused_given(equations, remaining_given_names)
 
     return doc
 
@@ -186,6 +190,12 @@ def _validate_top_level(scene):
     if not isinstance(scene["given"], dict):
         raise SceneError("scene.given must be a dict")
     for gname, gspec in scene["given"].items():
+        if not isinstance(gname, str) or not gname.isidentifier():
+            raise SceneError(f"given name {gname!r} must be a valid Python identifier")
+        if gname in _RESERVED_GIVEN_NAMES:
+            raise SceneError(
+                f"given name {gname!r} is reserved (parser built-in) and cannot be used"
+            )
         if not isinstance(gspec, dict) or "unit" not in gspec or "ranges" not in gspec:
             raise SceneError(f"given {gname!r} needs a 'unit' and 'ranges'")
 
@@ -418,6 +428,10 @@ def _process_events(events, bodies_by_name, given_names):
         ev_bodies = event.get("bodies")
         if not isinstance(ev_bodies, list) or len(ev_bodies) != 2:
             raise SceneError("meet event requires exactly two 'bodies'")
+        if ev_bodies[0] == ev_bodies[1]:
+            raise SceneError(
+                f"meet event bodies must be two distinct bodies, got {ev_bodies[0]!r} twice"
+            )
         for bn in ev_bodies:
             if bn not in bodies_by_name:
                 raise SceneError(f"meet event references undeclared body {bn!r}")
@@ -456,3 +470,32 @@ def _check_determinism(equations, aux):
             f"scene is underdetermined/overdetermined: {n_equations} equations "
             f"for {n_unknowns} unknowns"
         )
+
+
+def _referenced_names(equations):
+    """Collect every identifier referenced across a list of ``Eq(...)`` strings.
+
+    Each equation string is shaped like a Python expression (it is literally
+    parsed and evaluated as one downstream), so an AST parse in expression
+    mode is the safest way to find every name it mentions -- including names
+    that appear only inside a ``(-NAME)`` fragment emitted for a ``neg:NAME``
+    reference, which ``ast.Name`` naturally sees like any other identifier.
+    """
+    names = set()
+    for eq_str in equations:
+        tree = ast.parse(eq_str, mode="eval")
+        names.update(node.id for node in ast.walk(tree) if isinstance(node, ast.Name))
+    return names
+
+
+def _check_no_unused_given(equations, remaining_given_names):
+    """Reject a given that no emitted equation references.
+
+    An unused given would otherwise pass compile + the full gate and ship as
+    a red-herring fact in generated problems: the engine samples a value for
+    it, but no equation ever constrains it.
+    """
+    referenced = _referenced_names(equations)
+    for name in sorted(remaining_given_names):
+        if name not in referenced:
+            raise SceneError(f"given {name!r} is declared but never used by any equation")
