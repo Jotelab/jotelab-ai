@@ -105,3 +105,12 @@ def test_all_answers_nonnegative_downward_convention():
 def test_registered_and_loadable():
     assert "free-fall" in registry.topics()
     assert registry.load_template("free-fall").topic == "free-fall"
+
+
+def test_diagram_is_vertical_and_hides_the_answer():
+    data = generate("free-fall", given=("u", "g", "t"), find="v",
+                    difficulty="easy", seed=2)
+    assert data["diagram"]["orientation"] == "vertical"
+    seg = data["diagram"]["segments"][0]
+    assert seg["acceleration"]["symbol"] == "g"
+    assert "exact" not in seg["velocity_out"]

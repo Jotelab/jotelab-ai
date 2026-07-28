@@ -81,3 +81,11 @@ def test_negative_relative_velocities_occur():
 def test_registered_and_loadable():
     assert "relative-velocity" in registry.topics()
     assert registry.load_template("relative-velocity").topic == "relative-velocity"
+
+
+def test_diagram_names_both_bodies():
+    data = generate("relative-velocity", given=("va", "vb"), find="vab",
+                    difficulty="easy", seed=5)
+    assert data["diagram"]["kind"] == "actors"
+    assert [b["name"] for b in data["diagram"]["bodies"]] == ["A", "B"]
+    assert data["diagram"]["bodies"][0]["velocity"]["role"] == "given"
