@@ -138,9 +138,16 @@ def compile_scene(scene: dict) -> dict:
     else:  # pragma: no cover - guarded by _validate_sought_structure
         raise SceneError(f"unknown sought.quantity {quantity!r}")
 
+    # Name-sorted, not set-ordered: the emitted dict's key order becomes the
+    # Template's symbol order, which drives Template.valid_splits() and hence
+    # the CLI's random split pick. Iterating the set directly made that order
+    # vary per process (string hash randomization), so a bare `python -m engine`
+    # run was reproducible only within one process — and the random-topic CLI
+    # test flaked whenever the roll landed on a split this v1 scene cannot
+    # solve inside the re-roll budget.
     variables = {
         name: {"unit": given[name]["unit"], "ranges": given[name]["ranges"]}
-        for name in remaining_given_names
+        for name in sorted(remaining_given_names)
     }
     variables[find_name] = {"unit": find_unit, "ranges": find_ranges}
 

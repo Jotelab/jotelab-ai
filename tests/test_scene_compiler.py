@@ -202,6 +202,21 @@ def test_compile_two_phase_ascent():
     assert doc["default_split"] == {"given": ["a", "g", "t1"], "find": "H"}
 
 
+def test_compile_emits_variables_in_a_deterministic_order():
+    """Givens are emitted name-sorted, so the doc is identical run to run.
+
+    The key order becomes the Template's symbol order, which drives
+    valid_splits() and therefore which split a bare CLI run picks. Building it
+    from a set made that order vary per process (string hash randomization),
+    which flaked the random-topic CLI test whenever the roll landed on a split
+    this v1 scene cannot solve inside the re-roll budget.
+    """
+    doc = compile_scene(_two_phase_ascent_scene())
+    given_names = [n for n in doc["variables"] if n != "H"]
+    assert given_names == sorted(given_names) == ["a", "g", "t1"]
+    assert list(doc["variables"])[-1] == "H"  # the find is appended last
+
+
 # (b) the compiled doc parses and passes the full existing gate.
 def test_compile_two_phase_ascent_passes_the_gate():
     doc = compile_scene(_two_phase_ascent_scene())
