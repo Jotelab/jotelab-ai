@@ -247,6 +247,11 @@ python -m templates.declarative templates/data/suvat.json
 # mixed (chained) problem: part 1's answer feeds a given of part 2
 # --part TOPIC[:given,csv:find[:receive]] (2+ parts; receive auto-picked when unambiguous)
 python -m engine --part free-fall --part suvat:u,a,t:s:u --verify
+# links are whitelisted, not merely unit-checked: a pair must appear in
+# engine.chain.SANCTIONED_LINKS with a written justification, or the chain is
+# refused with UnsanctionedLinkError. Matching units are not physical sense —
+# free-fall is down-positive and upward-throw up-positive, so chaining those
+# two would flip the axis without the problem ever saying the body bounced.
 pytest tests/test_chain.py     # chain layer: links, typed errors, CLI, fidelity sweep
 
 # Data Fidelity: run a SUVAT seed batch through the verification harness → expect 100%

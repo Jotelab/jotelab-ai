@@ -14,13 +14,50 @@ contract that wraps the per-part ``sympy_data`` dicts unmodified.
 from __future__ import annotations
 
 from engine.errors import (ChainSpecError, IncompatibleLinkError,
-                           NoCleanInstanceError)
+                           NoCleanInstanceError, UnsanctionedLinkError)
 from engine.loop import generate
 from engine.registry import load_template
 
 # Bounded outer loop: whole-chain re-rolls when a pinned link value leaves a
 # downstream part with no clean instance (starting value, tune empirically).
 MAX_CHAIN_ATTEMPTS = 20
+
+# Which compositions are physically meaningful, and why.
+#
+# The engine can check that a link's units agree and that the value is carried
+# exactly; it cannot check that the resulting *scenario* makes sense, because it
+# models equations rather than situations. Two topics can share a unit and still
+# not compose: `free-fall` measures speed down-positive while `upward-throw`
+# measures it up-positive, so chaining them is m/s into m/s while quietly
+# flipping the axis — a body that falls and then rises at the same speed without
+# anything in the problem saying it bounced.
+#
+# So admissible pairs are enumerated by hand, keyed
+# ``(from_topic, from_find, to_topic, to_receive)``, and each one carries the
+# sentence that justifies it. Anything absent is refused with
+# UnsanctionedLinkError. This mirrors how ``templates/upward_throw.py`` handles
+# splits: a whitelist beats a rule the engine cannot actually evaluate.
+SANCTIONED_LINKS = {
+    ("free-fall", "v", "suvat", "u"): (
+        "A body released from rest reaches speed v as it falls; that speed is "
+        "the initial speed of the straight-line motion that follows (it lands "
+        "on a slope, enters water, or is caught and decelerated). Both stages "
+        "share one direction of travel, so no sign convention is crossed."
+    ),
+    ("suvat", "v", "upward-throw", "u"): (
+        "A launcher accelerates a projectile along its barrel to speed v, and "
+        "it leaves travelling straight up at that speed. upward-throw requires "
+        "u > 0, which the constraint already enforces, and the handover happens "
+        "at the moment the motion turns vertical — the launch speed is a "
+        "magnitude, so up-positive is consistent from that instant on."
+    ),
+    ("suvat", "v", "suvat", "u"): (
+        "Two consecutive phases of the same straight-line journey: the velocity "
+        "ending phase one begins phase two. This is the composition "
+        "multi-stage-motion models inside a single template, expressed as two "
+        "questions instead."
+    ),
+}
 
 
 def generate_chain(parts, difficulty="easy", seed=0,
@@ -132,6 +169,11 @@ def _validate(parts):
                 raise IncompatibleLinkError(
                     part["topic"], name, receive_unit, feed_unit
                 )
+            # Units agreeing is necessary but not sufficient — the composition
+            # itself has to be one someone vetted (see SANCTIONED_LINKS).
+            pair = (prev_template.topic, prev_find.name, template.topic, name)
+            if pair not in SANCTIONED_LINKS:
+                raise UnsanctionedLinkError(*pair)
         resolved.append((template, given, find, receive))
         prev_template, prev_find = template, find
     return resolved

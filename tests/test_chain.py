@@ -46,8 +46,8 @@ import json
 
 import pytest
 
-from engine.chain import generate_chain
-from engine.errors import NoCleanInstanceError
+from engine.chain import SANCTIONED_LINKS, generate_chain
+from engine.errors import NoCleanInstanceError, UnsanctionedLinkError
 
 # free-fall default split is (u, g, t) -> v [m/s]; suvat's u is m/s-compatible.
 PARTS = [
@@ -225,3 +225,44 @@ def test_cli_chain_unknown_topic_is_loud(capsys):
     err = capsys.readouterr().err
     assert rc == 1
     assert "error:" in err and "bogus-topic" in err
+
+
+# --- sanctioned links (physical composition, not just matching units) --------
+
+
+def test_cross_convention_link_is_refused():
+    """free-fall is down-positive; upward-throw is up-positive.
+
+    Feeding a falling speed straight into a launch speed type-checks — both are
+    m/s — but silently flips the sign convention: nothing in the problem says
+    the body bounced. Unit compatibility is not physical compatibility, so the
+    pair must be sanctioned explicitly or refused.
+    """
+    with pytest.raises(UnsanctionedLinkError, match="free-fall"):
+        generate_chain([
+            {"topic": "free-fall"},
+            {"topic": "upward-throw", "given": ["u", "g", "t"], "find": "v",
+             "receive": "u"},
+        ], seed=5)
+
+
+def test_refusal_names_the_pair_and_how_to_sanction_it():
+    """The message has to tell an author what to do next."""
+    with pytest.raises(UnsanctionedLinkError) as excinfo:
+        generate_chain([
+            {"topic": "free-fall"},
+            {"topic": "upward-throw", "given": ["u", "g", "t"], "find": "v",
+             "receive": "u"},
+        ], seed=5)
+    message = str(excinfo.value)
+    assert "v" in message and "u" in message
+    assert "SANCTIONED_LINKS" in message
+
+
+def test_every_sanctioned_link_carries_a_narrative():
+    """A pair is admitted because someone wrote down why it makes sense."""
+    assert SANCTIONED_LINKS
+    for (from_topic, from_find, to_topic, to_receive), why in SANCTIONED_LINKS.items():
+        assert all(isinstance(part, str) and part for part in
+                   (from_topic, from_find, to_topic, to_receive))
+        assert isinstance(why, str) and len(why) > 30, (from_topic, to_topic)

@@ -84,6 +84,33 @@ class ChainSpecError(EngineError):
         super().__init__(f"[mixed] invalid chain spec: {reason}")
 
 
+class UnsanctionedLinkError(EngineError):
+    """A chain link is dimensionally fine but not a vetted physical composition.
+
+    Matching units are necessary, not sufficient: ``free-fall`` measures a
+    falling speed down-positive and ``upward-throw`` a launch speed up-positive,
+    so feeding one into the other is ``m/s`` into ``m/s`` while silently
+    reversing the axis — the problem never says the body bounced. The engine
+    cannot judge that on its own (it has no model of the *scenario*, only of the
+    equations), so admissible compositions are enumerated by hand in
+    ``engine.chain.SANCTIONED_LINKS``, each with a written justification.
+
+    Raised at validation, before any part is generated.
+    """
+
+    def __init__(self, from_topic, from_find, to_topic, to_receive):
+        self.from_topic = from_topic
+        self.from_find = from_find
+        self.to_topic = to_topic
+        self.to_receive = to_receive
+        super().__init__(
+            f"[mixed] {from_topic}.{from_find} -> {to_topic}.{to_receive} is not a "
+            f"sanctioned link: the units line up, but no one has stated why the "
+            f"composition is physically meaningful. Add it to "
+            f"engine.chain.SANCTIONED_LINKS with a narrative, or pick another pair."
+        )
+
+
 class IncompatibleLinkError(EngineError):
     """A chain link's units don't match (chain design doc).
 
