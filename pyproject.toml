@@ -10,7 +10,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+# HTTP service that wraps the engine (DEVELOPMENT_PLAN §1.1). Kept optional so the
+# pure engine/harness stay dependency-light; install with `.[service]` to serve.
+service = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+]
+# TestClient needs httpx; installing the dev extra runs the service tests too.
+dev = ["pytest>=8", "fastapi>=0.110", "httpx>=0.27"]
 
 [tool.pytest.ini_options]
 # Engine/templates/harness are top-level packages at the repo root.

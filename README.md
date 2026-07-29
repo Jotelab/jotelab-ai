@@ -257,6 +257,43 @@ pytest tests/test_chain.py     # chain layer: links, typed errors, CLI, fidelity
 # Data Fidelity: run a SUVAT seed batch through the verification harness → expect 100%
 ```
 
+## Engine HTTP service
+
+The engine is also exposed over HTTP (`service/`) so the web app calls it instead of
+computing numbers itself (DEVELOPMENT_PLAN §1.1). Two endpoints, both behind a shared
+secret header `X-Engine-Api-Key` (value = `ENGINE_API_KEY`):
+
+| Method & path | Body | Returns |
+| --- | --- | --- |
+| `POST /generate` | `{topic, difficulty, given?, find?, conditions?, seed?}` | the locked `sympy_data` contract — **already passed the Data Fidelity harness** |
+| `POST /verify` | `{sympy_data, difficulty}` | `{verified: bool, detail?}` |
+| `POST /chain` | `{parts: [{topic, given?, find?, receive?}, …], difficulty, seed?}` | one chained multi-part problem, every part verified and every link asserted exact |
+| `GET /health` | — | `{status, topics}` (no auth) |
+
+Every `/generate` response is verified through `harness/verify.py`
+(`verify_generic`, so **every registered topic** serves, not just SUVAT) before
+it is returned — fidelity is enforced at the source, never trusted downstream.
+`/chain` composes parts only along `SANCTIONED_LINKS` (`engine/chain.py`); an
+unvetted composition returns 400, never a plausible-looking wrong problem.
+
+```bash
+# install the service extra, then run locally
+pip install -e ".[service]"          # or: pip install -r requirements.txt
+cp .env.example .env                  # set ENGINE_API_KEY
+ENGINE_API_KEY=dev-secret uvicorn service.app:app --reload --port 8000
+
+# smoke-test
+curl localhost:8000/health
+curl -X POST localhost:8000/generate -H "X-Engine-Api-Key: dev-secret" \
+  -H "Content-Type: application/json" \
+  -d '{"topic":"suvat","given":["u","a","t"],"find":"v","conditions":{"u":0,"a":2,"t":5}}'
+```
+
+**Deploy target: [Render](https://render.com)** (pinned per DEVELOPMENT_PLAN §1.1) — an
+always-on Python web service built from the included `Dockerfile`. Set `ENGINE_API_KEY`
+in the Render dashboard; Render injects `$PORT`, which the container honors. The web app
+(PhysicsJotelab) then points at it via `ENGINE_BASE_URL` + the matching `ENGINE_API_KEY`.
+
 ## Correctness gates (the benchmark)
 
 - **Data Fidelity** — numbers/units in the problem text match the SymPy computation 100%.
