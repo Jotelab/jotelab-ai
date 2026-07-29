@@ -1,0 +1,16 @@
+# Render blueprint (DEVELOPMENT_PLAN §1.1 ops loose end): deploy the engine
+# service from this repo with "New → Blueprint" in the Render dashboard.
+# The Dockerfile honors Render's injected $PORT; /health is unauthenticated.
+services:
+  - type: web
+    name: jotelab-engine
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # The shared secret the web app must send as X-Engine-Api-Key.
+      # generateValue creates it on first deploy; copy it into the web app's
+      # ENGINE_API_KEY (Vercel env) together with ENGINE_BASE_URL.
+      - key: ENGINE_API_KEY
+        generateValue: true

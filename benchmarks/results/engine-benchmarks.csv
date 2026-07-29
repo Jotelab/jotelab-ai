@@ -1,0 +1,45 @@
+scope,name,difficulty,instances,ok,fidelity_error,no_clean_instance,ok_rate
+topic,average-speed,easy,10,10,0,0,1.0000
+topic,average-speed,medium,10,10,0,0,1.0000
+topic,average-speed,hard,10,10,0,0,1.0000
+topic,distance-displacement,easy,10,10,0,0,1.0000
+topic,distance-displacement,medium,10,10,0,0,1.0000
+topic,distance-displacement,hard,10,10,0,0,1.0000
+topic,free-fall,easy,100,100,0,0,1.0000
+topic,free-fall,medium,100,85,0,15,0.8500
+topic,free-fall,hard,100,90,0,10,0.9000
+topic,motion-graphs,easy,25,25,0,0,1.0000
+topic,motion-graphs,medium,25,25,0,0,1.0000
+topic,motion-graphs,hard,25,25,0,0,1.0000
+topic,multi-stage-motion,easy,20,20,0,0,1.0000
+topic,multi-stage-motion,medium,20,20,0,0,1.0000
+topic,multi-stage-motion,hard,20,20,0,0,1.0000
+topic,pursuit,easy,20,20,0,0,1.0000
+topic,pursuit,medium,20,20,0,0,1.0000
+topic,pursuit,hard,20,20,0,0,1.0000
+topic,relative-velocity,easy,15,15,0,0,1.0000
+topic,relative-velocity,medium,15,15,0,0,1.0000
+topic,relative-velocity,hard,15,15,0,0,1.0000
+topic,suvat,easy,100,100,0,0,1.0000
+topic,suvat,medium,100,100,0,0,1.0000
+topic,suvat,hard,100,100,0,0,1.0000
+topic,two-phase-ascent,easy,20,20,0,0,1.0000
+topic,two-phase-ascent,medium,20,10,0,10,0.5000
+topic,two-phase-ascent,hard,20,5,0,15,0.2500
+topic,upward-throw,easy,25,25,0,0,1.0000
+topic,upward-throw,medium,25,25,0,0,1.0000
+topic,upward-throw,hard,25,25,0,0,1.0000
+topic,vectors-1d,easy,15,15,0,0,1.0000
+topic,vectors-1d,medium,15,15,0,0,1.0000
+topic,vectors-1d,hard,15,15,0,0,1.0000
+topic,TOTAL,all,1080,1030,0,50,0.9537
+chain,free-fall.v -> suvat.u,easy,5,5,0,0,1.0000
+chain,free-fall.v -> suvat.u,medium,5,5,0,0,1.0000
+chain,free-fall.v -> suvat.u,hard,5,5,0,0,1.0000
+chain,suvat.v -> upward-throw.u,easy,5,5,0,0,1.0000
+chain,suvat.v -> upward-throw.u,medium,5,5,0,0,1.0000
+chain,suvat.v -> upward-throw.u,hard,5,5,0,0,1.0000
+chain,suvat.v -> suvat.u,easy,5,5,0,0,1.0000
+chain,suvat.v -> suvat.u,medium,5,5,0,0,1.0000
+chain,suvat.v -> suvat.u,hard,5,5,0,0,1.0000
+chain,TOTAL,all,45,45,0,0,1.0000
