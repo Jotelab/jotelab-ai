@@ -1,13 +1,16 @@
 """FastAPI app exposing the symbolic engine over HTTP (DEVELOPMENT_PLAN §1.1).
 
-Two endpoints, both behind a shared-secret header (``X-Engine-Api-Key``):
+Three endpoints, all behind a shared-secret header (``X-Engine-Api-Key``):
 
 * ``POST /generate`` — sample one fully-solved problem via
   :func:`engine.loop.generate`, **enforce Data Fidelity at the source** by running
-  it through :func:`harness.verify.verify` before returning, and emit the locked
-  ``sympy_data`` contract verbatim (see :mod:`engine.contract`).
+  it through :func:`harness.verify.verify_generic` before returning, and emit the
+  locked ``sympy_data`` contract verbatim (see :mod:`engine.contract`).
 * ``POST /verify`` — run the Data Fidelity harness on a caller-supplied
   ``sympy_data`` payload and report whether it is faithful.
+* ``POST /chain`` — generate one chained (mixed) multi-part problem via
+  :func:`engine.chain.generate_chain`, verified end to end by
+  :func:`harness.verify.verify_chain`.
 
 The web app trusts numbers only because they are verified here, not downstream:
 a ``/generate`` response can never leave this process without passing the harness.
@@ -23,10 +26,16 @@ from typing import Literal, Optional
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
-from engine.errors import EngineError
+from engine.chain import generate_chain
+from engine.errors import (
+    ChainSpecError,
+    EngineError,
+    IncompatibleLinkError,
+    UnsanctionedLinkError,
+)
 from engine.loop import generate as engine_generate
 from engine.registry import load_template, topics
-from harness.verify import FidelityError, verify
+from harness.verify import FidelityError, verify_chain, verify_generic
 
 app = FastAPI(
     title="Jotelab Symbolic Engine",
@@ -148,8 +157,14 @@ def generate(req: GenerateRequest) -> dict:
         raise HTTPException(status_code=422, detail=str(exc))  # Unprocessable
 
     # Fidelity gate: a response can never leave unverified (DEVELOPMENT_PLAN §1.1).
+    #
+    # ``verify_generic``, not the SUVAT-only ``verify``: it reads symbols,
+    # equations, units, constraints and the root policy off the parsed template,
+    # so every registered topic is checked with the same (a)-(e) battery. Found
+    # while wiring the sandbox testbench: with ``verify`` the service could only
+    # ever serve ``suvat`` (501 for every other topic).
     try:
-        verify(data, difficulty=req.difficulty)
+        verify_generic(data, load_template(req.topic), difficulty=req.difficulty)
     except NotImplementedError as exc:  # topic has no harness yet — refuse to ship it
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=str(exc)
@@ -170,7 +185,11 @@ def generate(req: GenerateRequest) -> dict:
 def verify_payload(req: VerifyRequest) -> VerifyResponse:
     """Run the Data Fidelity harness on a caller-supplied ``sympy_data`` payload."""
     try:
-        verify(req.sympy_data, difficulty=req.difficulty)
+        verify_generic(
+            req.sympy_data,
+            load_template(req.sympy_data["topic"]),
+            difficulty=req.difficulty,
+        )
     except NotImplementedError as exc:
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=str(exc))
     except FidelityError as exc:
@@ -180,3 +199,54 @@ def verify_payload(req: VerifyRequest) -> VerifyResponse:
             status_code=422, detail=f"Malformed sympy_data payload: {exc}"
         )
     return VerifyResponse(verified=True)
+
+
+# --------------------------------------------------------------------------- #
+# Chained (mixed) problems — multi-part problems where part n's answer becomes
+# a declared given of part n+1 (engine/chain.py).
+#
+# Same contract as /generate: nothing leaves unverified. verify_chain runs the
+# full (a)-(e) battery on every part AND asserts each link carries the previous
+# answer exactly — so a chain whose parts are individually right but wired
+# together wrongly still fails here rather than downstream.
+# --------------------------------------------------------------------------- #
+class ChainPart(BaseModel):
+    topic: str = Field(..., description="Registered topic name.")
+    given: Optional[list[str]] = Field(None, description="Given variable names.")
+    find: Optional[str] = Field(None, description="Target variable name.")
+    receive: Optional[str] = Field(
+        None,
+        description="Which given takes the previous part's answer. Required on every part after the first.",
+    )
+
+
+class ChainRequest(BaseModel):
+    parts: list[ChainPart] = Field(..., min_length=2)
+    difficulty: Literal["easy", "medium", "hard"] = "easy"
+    seed: Optional[int] = None
+
+
+@app.post("/chain", dependencies=[Depends(require_api_key)])
+def chain(req: ChainRequest) -> dict:
+    """Generate one mixed (chained) problem, verified end to end."""
+    seed = req.seed if req.seed is not None else random.randrange(1_000_000)
+    parts = [part.model_dump(exclude_none=True) for part in req.parts]
+
+    try:
+        data = generate_chain(parts, difficulty=req.difficulty, seed=seed)
+    except (ChainSpecError, IncompatibleLinkError, UnsanctionedLinkError) as exc:
+        # Bad spec: the caller's fault — including a link no one has vetted.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except KeyError as exc:  # unknown topic or variable name
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except EngineError as exc:  # unsolvable split, or no clean chain in budget
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    try:
+        verify_chain(data, difficulty=req.difficulty)
+    except FidelityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Chain fidelity check failed at source: {exc}",
+        )
+    return data

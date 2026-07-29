@@ -98,3 +98,70 @@ def test_verify_rejects_tampered_payload(client):
     resp = client.post("/verify", json={"sympy_data": data}, headers=AUTH)
     assert resp.status_code == 200
     assert resp.json()["verified"] is False
+
+
+def test_generate_serves_every_registered_topic(client):
+    """The verify_generic gate serves all topics, not just suvat.
+
+    Regression for the sandbox finding: the original service called the
+    SUVAT-only ``harness.verify.verify`` and answered 501 for every other
+    registered topic.
+    """
+    from engine.registry import topics
+
+    for topic in topics():
+        resp = client.post(
+            "/generate", json={"topic": topic, "seed": 1}, headers=AUTH
+        )
+        assert resp.status_code == 200, f"{topic}: {resp.json()}"
+        assert resp.json()["topic"] == topic
+
+
+def test_chain_sanctioned_link_is_verified_and_reproducible(client):
+    """A free-fall → suvat chain (sanctioned link) serves end to end."""
+    payload = {
+        "difficulty": "easy",
+        "seed": 7,
+        "parts": [
+            {"topic": "free-fall"},
+            {"topic": "suvat", "given": ["u", "a", "t"], "find": "s",
+             "receive": "u"},
+        ],
+    }
+    resp = client.post("/chain", json=payload, headers=AUTH)
+    assert resp.status_code == 200, resp.json()
+    data = resp.json()
+    parts = data["parts"]
+    assert len(parts) == 2
+    # The link carries part 1's exact answer into part 2's received given.
+    linked = next(g for g in parts[1]["given"] if g["symbol"] == "u")
+    assert linked["exact"] == parts[0]["find"]["exact"]
+    # Determinism: same request, same chain.
+    again = client.post("/chain", json=payload, headers=AUTH)
+    assert again.json() == data
+
+
+def test_chain_missing_receive_returns_400(client):
+    resp = client.post(
+        "/chain",
+        json={"parts": [{"topic": "free-fall"}, {"topic": "suvat"}]},
+        headers=AUTH,
+    )
+    assert resp.status_code == 400
+    assert "receive" in resp.json()["detail"]
+
+
+def test_chain_unsanctioned_link_returns_400(client):
+    """A physically unvetted composition is refused loudly, not served."""
+    resp = client.post(
+        "/chain",
+        json={
+            "parts": [
+                {"topic": "free-fall"},
+                {"topic": "upward-throw", "receive": "u"},
+            ]
+        },
+        headers=AUTH,
+    )
+    assert resp.status_code == 400
+    assert "sanctioned" in resp.json()["detail"]

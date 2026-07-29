@@ -267,10 +267,14 @@ secret header `X-Engine-Api-Key` (value = `ENGINE_API_KEY`):
 | --- | --- | --- |
 | `POST /generate` | `{topic, difficulty, given?, find?, conditions?, seed?}` | the locked `sympy_data` contract — **already passed the Data Fidelity harness** |
 | `POST /verify` | `{sympy_data, difficulty}` | `{verified: bool, detail?}` |
+| `POST /chain` | `{parts: [{topic, given?, find?, receive?}, …], difficulty, seed?}` | one chained multi-part problem, every part verified and every link asserted exact |
 | `GET /health` | — | `{status, topics}` (no auth) |
 
-Every `/generate` response is verified through `harness/verify.py` before it is
-returned — fidelity is enforced at the source, never trusted downstream.
+Every `/generate` response is verified through `harness/verify.py`
+(`verify_generic`, so **every registered topic** serves, not just SUVAT) before
+it is returned — fidelity is enforced at the source, never trusted downstream.
+`/chain` composes parts only along `SANCTIONED_LINKS` (`engine/chain.py`); an
+unvetted composition returns 400, never a plausible-looking wrong problem.
 
 ```bash
 # install the service extra, then run locally
