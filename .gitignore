@@ -8,3 +8,7 @@ __pycache__/
 # Claude Code local state (machine-specific settings and worktrees)
 .claude/settings.local.json
 .claude/worktrees/
+
+# Local secrets for the engine service (ENGINE_API_KEY). Never commit; .env.example
+# is the tracked template.
+.env
