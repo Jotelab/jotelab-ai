@@ -6,8 +6,8 @@ topic,distance-displacement,easy,10,10,0,0,1.0000
 topic,distance-displacement,medium,10,10,0,0,1.0000
 topic,distance-displacement,hard,10,10,0,0,1.0000
 topic,free-fall,easy,100,100,0,0,1.0000
-topic,free-fall,medium,100,85,0,15,0.8500
-topic,free-fall,hard,100,90,0,10,0.9000
+topic,free-fall,medium,100,100,0,0,1.0000
+topic,free-fall,hard,100,100,0,0,1.0000
 topic,motion-graphs,easy,25,25,0,0,1.0000
 topic,motion-graphs,medium,25,25,0,0,1.0000
 topic,motion-graphs,hard,25,25,0,0,1.0000
@@ -24,15 +24,15 @@ topic,suvat,easy,100,100,0,0,1.0000
 topic,suvat,medium,100,100,0,0,1.0000
 topic,suvat,hard,100,100,0,0,1.0000
 topic,two-phase-ascent,easy,20,20,0,0,1.0000
-topic,two-phase-ascent,medium,20,10,0,10,0.5000
-topic,two-phase-ascent,hard,20,5,0,15,0.2500
+topic,two-phase-ascent,medium,20,20,0,0,1.0000
+topic,two-phase-ascent,hard,20,20,0,0,1.0000
 topic,upward-throw,easy,25,25,0,0,1.0000
 topic,upward-throw,medium,25,25,0,0,1.0000
 topic,upward-throw,hard,25,25,0,0,1.0000
 topic,vectors-1d,easy,15,15,0,0,1.0000
 topic,vectors-1d,medium,15,15,0,0,1.0000
 topic,vectors-1d,hard,15,15,0,0,1.0000
-topic,TOTAL,all,1080,1030,0,50,0.9537
+topic,TOTAL,all,1080,1080,0,0,1.0000
 chain,free-fall.v -> suvat.u,easy,5,5,0,0,1.0000
 chain,free-fall.v -> suvat.u,medium,5,5,0,0,1.0000
 chain,free-fall.v -> suvat.u,hard,5,5,0,0,1.0000

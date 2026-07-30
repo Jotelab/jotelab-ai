@@ -18,8 +18,8 @@ the source-side bound on the report's Data Fidelity metric.
 | distance-displacement | medium | 10 | 10 | 0 | 0 | 1.0000 |
 | distance-displacement | hard | 10 | 10 | 0 | 0 | 1.0000 |
 | free-fall | easy | 100 | 100 | 0 | 0 | 1.0000 |
-| free-fall | medium | 100 | 85 | 0 | 15 | 0.8500 |
-| free-fall | hard | 100 | 90 | 0 | 10 | 0.9000 |
+| free-fall | medium | 100 | 100 | 0 | 0 | 1.0000 |
+| free-fall | hard | 100 | 100 | 0 | 0 | 1.0000 |
 | motion-graphs | easy | 25 | 25 | 0 | 0 | 1.0000 |
 | motion-graphs | medium | 25 | 25 | 0 | 0 | 1.0000 |
 | motion-graphs | hard | 25 | 25 | 0 | 0 | 1.0000 |
@@ -36,15 +36,15 @@ the source-side bound on the report's Data Fidelity metric.
 | suvat | medium | 100 | 100 | 0 | 0 | 1.0000 |
 | suvat | hard | 100 | 100 | 0 | 0 | 1.0000 |
 | two-phase-ascent | easy | 20 | 20 | 0 | 0 | 1.0000 |
-| two-phase-ascent | medium | 20 | 10 | 0 | 10 | 0.5000 |
-| two-phase-ascent | hard | 20 | 5 | 0 | 15 | 0.2500 |
+| two-phase-ascent | medium | 20 | 20 | 0 | 0 | 1.0000 |
+| two-phase-ascent | hard | 20 | 20 | 0 | 0 | 1.0000 |
 | upward-throw | easy | 25 | 25 | 0 | 0 | 1.0000 |
 | upward-throw | medium | 25 | 25 | 0 | 0 | 1.0000 |
 | upward-throw | hard | 25 | 25 | 0 | 0 | 1.0000 |
 | vectors-1d | easy | 15 | 15 | 0 | 0 | 1.0000 |
 | vectors-1d | medium | 15 | 15 | 0 | 0 | 1.0000 |
 | vectors-1d | hard | 15 | 15 | 0 | 0 | 1.0000 |
-| TOTAL | all | 1080 | 1030 | 0 | 50 | 0.9537 |
+| TOTAL | all | 1080 | 1080 | 0 | 0 | 1.0000 |
 
 ## Chain fidelity (sanctioned links)
 

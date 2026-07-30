@@ -72,3 +72,59 @@ def test_policy_loosen_increments_places():
     assert loosened.max_places == easy.max_places + 1
     assert loosened.loosened is True
     assert loosened.is_clean(sympy.Rational(101, 100))  # now 2 decimals pass
+
+
+# -- pivot re-roll (answer-first sampling for weak cells, 2026-07-31) ----------
+
+
+def test_pivot_rescues_inverse_free_fall_split():
+    """The weak-cell fix: {u,g,h}->t at medium used to fail ~15% of seeds
+    (clean t needs h/(...) to be a perfect square under a random integer h).
+    The pivot samples t from its own range and derives h, so every seed of
+    this cell must now produce a verified instance with a clean answer."""
+    for seed in range(1, 11):
+        data = generate(
+            "free-fall", given=("u", "g", "h"), find="t",
+            difficulty="medium", seed=seed,
+        )
+        answer = sympy.nsimplify(data["final_answer"]["exact"])
+        assert policy_mod.for_("free-fall", "medium").is_clean(answer)
+
+
+def test_pivot_keeps_derived_given_sampler_shaped():
+    """A pivot-derived given must be indistinguishable from a sampled one:
+    integer and inside the per-difficulty range (spec §6 plausibility)."""
+    from engine.registry import load_template
+
+    template = load_template("free-fall")
+    lo, hi, _ = template.range_for(template.symbol("h"), "medium")
+    for seed in range(1, 11):
+        data = generate(
+            "free-fall", given=("u", "g", "h"), find="t",
+            difficulty="medium", seed=seed,
+        )
+        h_given = next(g for g in data["given"] if g["symbol"] == "h")
+        h_value = sympy.nsimplify(h_given["exact"])
+        assert h_value.is_Integer
+        assert lo <= h_value <= hi
+
+
+def test_pivot_determinism():
+    """Spec §5, §7 still hold with the pivot in play: same seed, same bytes."""
+    kw = dict(
+        topic="two-phase-ascent", given=("a", "g", "H"), find="t1",
+        difficulty="hard", seed=7,
+    )
+    assert generate(**kw) == generate(**kw)
+
+
+def test_pivot_never_derives_a_pinned_given():
+    """A condition-pinned given keeps its pinned value: the pivot may only
+    derive a *free* given (a pinned one is excluded from pivot plans)."""
+    for seed in range(1, 6):
+        data = generate(
+            "free-fall", given=("u", "g", "h"), find="t",
+            difficulty="medium", seed=seed, conditions={"u": 0},
+        )
+        u_given = next(g for g in data["given"] if g["symbol"] == "u")
+        assert sympy.nsimplify(u_given["exact"]) == 0

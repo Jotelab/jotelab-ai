@@ -30,6 +30,10 @@ from engine.registry import load_template
 MAX_ATTEMPTS = 200
 SOFT_LIMIT = 120
 
+# Pivot attempts draw from a disjoint region of the seed space so they never
+# perturb the RNG stream of the normal attempts (determinism, spec §7).
+_PIVOT_SEED_OFFSET = 10_000_000
+
 
 def generate(topic, given=None, find=None, conditions=None, difficulty="easy",
              seed=0, max_attempts=MAX_ATTEMPTS, soft_limit=SOFT_LIMIT):
@@ -60,6 +64,8 @@ def generate(topic, given=None, find=None, conditions=None, difficulty="easy",
     if template.signed_answer:
         pol = policy_mod.permit_sign(pol)  # vector topics: keep the direction sign
 
+    pivots = _pivot_plans(template, given, find, conditions)
+
     for attempt in range(1, max_attempts + 1):
         inputs = sampling.sample(template, given, conditions, difficulty, seed + attempt)
         solved = _solve(equation, find, inputs, template, difficulty)
@@ -74,10 +80,98 @@ def generate(topic, given=None, find=None, conditions=None, difficulty="easy",
                     seed=seed, policy=pol, plausible=True,
                     aux_values=aux_values,
                 )
+
+        # Pivot re-roll (2026-07-31, weak-cell fix): when the forward split
+        # rarely lands a clean answer (find appears under a root — e.g.
+        # free-fall's t from {u,g,h}, two-phase-ascent's t1 from {a,g,H}),
+        # invert the sampling: draw the *answer* from its own range (an integer
+        # draw is clean under every tier), derive one given by solving the same
+        # relation the other way, and — if that given looks like a native draw
+        # — hand the completed inputs to the untouched forward path below, so
+        # steps, root selection, cleanliness, and plausibility gates are
+        # byte-identical to a lucky normal roll.
+        if pivots:
+            pivot_inputs = _pivot_attempt(
+                template, pivots, find, attempt, conditions, difficulty, seed
+            )
+            if pivot_inputs is not None:
+                solved = _solve(equation, find, pivot_inputs, template, difficulty)
+                if solved is not None:
+                    value, sym_expr, aux_values = solved
+                    values = dict(pivot_inputs)
+                    values[find] = value
+                    values.update(aux_values)
+                    if _satisfies(values, find, template, pol, difficulty):
+                        return contract.build_sympy_data(
+                            template, given, find, pivot_inputs, value, sym_expr,
+                            seed=seed, policy=pol, plausible=True,
+                            aux_values=aux_values,
+                        )
+
         if attempt == soft_limit:
             pol = policy_mod.loosen(pol)  # graceful degradation (spec §5, §6)
 
     raise NoCleanInstanceError(topic, find.name, attempts=max_attempts)
+
+
+def _pivot_plans(template, given, find, conditions):
+    """Every workable answer-first plan for this split (spec §5 extension).
+
+    A pivot plan swaps one given with ``find``: the swapped set is sampled and
+    the pivot is derived by solving the swapped split. Requires the swapped
+    split to be solvable by the template's own map — the same validation the
+    forward split went through — and the pivot to be free (a pinned given must
+    keep its pinned value, so it can never be the derived one).
+    """
+    conditions = conditions or {}
+    plans = []
+    for pivot in given:
+        if pivot in conditions or pivot.name in conditions:
+            continue
+        swapped = tuple(find if g is pivot else g for g in given)
+        ok, info = template.solvability(swapped, pivot)
+        if ok:
+            plans.append((pivot, swapped, info))
+    return plans
+
+
+def _pivot_attempt(template, pivots, find, attempt, conditions, difficulty, seed):
+    """One answer-first draw: returns completed forward inputs, or ``None``.
+
+    Rotates through the pivot plans across attempts. The derived pivot must
+    pass ``_input_like`` — it stands in for a sampled given, and a value no
+    sampler could have drawn (fractional, out of band) would leak an
+    implausible given into the problem statement.
+    """
+    pivot, swapped, info = pivots[(attempt - 1) % len(pivots)]
+    inputs = sampling.sample(
+        template, swapped, conditions, difficulty,
+        seed + _PIVOT_SEED_OFFSET + attempt,
+    )
+    solved = _solve(info, pivot, inputs, template, difficulty)
+    if solved is None:
+        return None
+    pivot_value, _, _ = solved
+    if not _input_like(pivot_value, template, pivot, difficulty):
+        return None
+    # `swapped` = given with the pivot replaced by find; the forward inputs are
+    # the sampled non-find values plus the derived pivot.
+    forward_inputs = {sym: val for sym, val in inputs.items() if sym != find}
+    forward_inputs[pivot] = pivot_value
+    return forward_inputs
+
+
+def _input_like(value, template, sym, difficulty):
+    """Could ``value`` have come out of the sampler for ``sym``? (spec §6)
+
+    Integer (sampled draws are Integer by construction) and inside the
+    per-difficulty range — magnitude-wise for signed ranges.
+    """
+    if not (value.is_real and value.is_number and value.is_Integer):
+        return False
+    lo, hi, signed = template.range_for(sym, difficulty)
+    magnitude = abs(value) if signed else value
+    return bool(lo <= magnitude <= hi)
 
 
 def _solve(info, find, inputs, template, difficulty):
