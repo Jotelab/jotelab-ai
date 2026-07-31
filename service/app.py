@@ -1,6 +1,6 @@
 """FastAPI app exposing the symbolic engine over HTTP (DEVELOPMENT_PLAN §1.1).
 
-Three endpoints, all behind a shared-secret header (``X-Engine-Api-Key``):
+Four endpoints, all behind a shared-secret header (``X-Engine-Api-Key``):
 
 * ``POST /generate`` — sample one fully-solved problem via
   :func:`engine.loop.generate`, **enforce Data Fidelity at the source** by running
@@ -11,6 +11,9 @@ Three endpoints, all behind a shared-secret header (``X-Engine-Api-Key``):
 * ``POST /chain`` — generate one chained (mixed) multi-part problem via
   :func:`engine.chain.generate_chain`, verified end to end by
   :func:`harness.verify.verify_chain`.
+* ``POST /author`` — turn a natural-language description into a declarative
+  template via Gemini, admit it through the five-stage validation gate (with
+  repair retries), register it live, and persist it (service/authoring.py).
 
 The web app trusts numbers only because they are verified here, not downstream:
 a ``/generate`` response can never leave this process without passing the harness.
@@ -36,6 +39,7 @@ from engine.errors import (
 from engine.loop import generate as engine_generate
 from engine.registry import load_template, topics
 from harness.verify import FidelityError, verify_chain, verify_generic
+from service import authoring
 
 app = FastAPI(
     title="Jotelab Symbolic Engine",
@@ -250,3 +254,82 @@ def chain(req: ChainRequest) -> dict:
             detail=f"Chain fidelity check failed at source: {exc}",
         )
     return data
+
+
+# --------------------------------------------------------------------------- #
+# Template authoring — natural language -> gate-vetted declarative template
+# (service/authoring.py; spec 2026-07-17, demo-day Gemini variant).
+#
+# The LLM authors only the rules; every draft passes the five-stage gate before
+# it is registered, so /generate's guarantees are unchanged. Sample instances
+# returned here go through the same generate + verify_generic path as /generate.
+# --------------------------------------------------------------------------- #
+class AuthorRequest(BaseModel):
+    description: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        description='Natural-language request, e.g. "projectile motion, launch angle and range, medium difficulty".',
+    )
+    topic: Optional[str] = Field(
+        None, description="Pin the new topic's name; the model picks one if omitted."
+    )
+    max_attempts: int = Field(
+        3, ge=1, le=5, description="Model attempts (first draft + repair retries)."
+    )
+
+
+def _author_samples(topic: str) -> list[dict]:
+    """One verified instance per difficulty band from the freshly-registered topic."""
+    samples = []
+    for band in ("easy", "medium", "hard"):
+        given, find = _random_split(topic)
+        try:
+            data = engine_generate(
+                topic, given=given, find=find, difficulty=band, seed=random.randrange(1_000_000)
+            )
+            verify_generic(data, load_template(topic), difficulty=band)
+        except (EngineError, FidelityError, NotImplementedError):
+            continue  # samples are illustrative; the gate already smoke-tested
+        samples.append(data)
+    return samples
+
+
+@app.post("/author", dependencies=[Depends(require_api_key)])
+def author(req: AuthorRequest) -> dict:
+    """Author a new topic from a description; register + persist it on all-pass."""
+    try:
+        model_call = authoring.get_model_call()
+    except authoring.AuthoringConfigError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+
+    try:
+        result = authoring.author_template(
+            req.description,
+            topic=req.topic,
+            max_attempts=req.max_attempts,
+            model_call=model_call,
+        )
+    except authoring.TopicCollisionError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except authoring.ModelCallError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    except authoring.AuthoringError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": str(exc),
+                "attempts": exc.attempts,
+                "last_draft": exc.last_draft,
+                "gate_report": authoring.report_to_dict(exc.last_report),
+            },
+        )
+
+    return {
+        "topic": result.doc["topic"],
+        "attempts": result.attempts,
+        "gate_report": authoring.report_to_dict(result.report),
+        "template": result.doc,
+        "persisted_to": str(result.path) if result.path else None,
+        "samples": _author_samples(result.doc["topic"]),
+    }

@@ -7,6 +7,8 @@ strands register here; the loop is topic-agnostic and goes through this map.
 from __future__ import annotations
 
 import contextlib
+import logging
+from pathlib import Path
 
 from templates.average_speed import AVERAGE_SPEED
 from templates.base import Template
@@ -82,6 +84,12 @@ _DECLARATIVE_TOPICS = ("vectors_1d.json", "free_fall.json",
                        "relative_velocity.json", "pursuit.json")
 _declarative_loaded = False
 
+# Gate-accepted templates written by the authoring endpoint (service/authoring.py)
+# land here and are re-registered on the next start. They carry
+# ``trust_state: "unverified"`` (ADR-007) — gate-vetted at authoring time, but not
+# CI-vetted like the seed topics above.
+AUTHORED_DIR = Path(__file__).resolve().parents[1] / "templates" / "data" / "authored"
+
 # Topics authored as scene documents in ``templates/scenes/data/`` and compiled
 # to a template doc via ``templates.scenes.compile_scene`` before parsing (the
 # scene compiler, spec 2026-07-29). ``pursuit_scene.json`` also lives in that
@@ -108,13 +116,23 @@ def _ensure_declarative_loaded() -> None:
     _declarative_loaded = True
 
     import json
-    from pathlib import Path
 
     from templates.declarative.parse import parse_template
 
     data_dir = Path(__file__).resolve().parents[1] / "templates" / "data"
     for filename in _DECLARATIVE_TOPICS:
         template = parse_template(json.loads((data_dir / filename).read_text()))
+        _REGISTRY.setdefault(template.topic, template)
+
+    # Authored topics (gate-accepted at authoring time). A file that no longer
+    # parses must not brick the whole registry — skip it loudly instead.
+    for path in sorted(AUTHORED_DIR.glob("*.json")):
+        try:
+            template = parse_template(json.loads(path.read_text()))
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "skipping authored template %s: %s", path.name, exc)
+            continue
         _REGISTRY.setdefault(template.topic, template)
 
     from templates.scenes import compile_scene
